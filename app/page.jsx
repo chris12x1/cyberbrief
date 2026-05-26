@@ -24,7 +24,7 @@ function LoadingCard({ index }) {
   )
 }
 
-function AuthBar({ isSignedIn }) {
+function AuthBar({ isSignedIn, onUpgrade, upgrading }) {
   return (
     <div style={{
       position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
@@ -55,35 +55,40 @@ function AuthBar({ isSignedIn }) {
             </SignUpButton>
           </>
         ) : (
-          <UserButton afterSignOutUrl="/" />
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+            <button onClick={onUpgrade} disabled={upgrading} style={{
+              background: upgrading ? '#0a1120' : '#3a7bd5',
+              border: 'none', color: '#fff', borderRadius: '6px', padding: '5px 14px',
+              fontSize: '11px', fontFamily: "'JetBrains Mono', monospace",
+              cursor: upgrading ? 'not-allowed' : 'pointer', fontWeight: 700,
+            }}>
+              {upgrading ? 'Redirecting...' : '⚡ Get Pro — $7/mo'}
+            </button>
+            <UserButton afterSignOutUrl="/" />
+          </div>
         )}
       </div>
     </div>
   )
 }
 
-function UpgradeBanner() {
+function UpgradeBanner({ onUpgrade, upgrading }) {
   return (
     <div style={{
       background: 'linear-gradient(135deg, #0f1e35, #1a2e50)',
-      border: '1px solid #3a7bd5',
-      borderRadius: '8px', padding: '16px 20px', marginBottom: '20px',
+      border: '1px solid #3a7bd5', borderRadius: '8px', padding: '16px 20px', marginBottom: '20px',
       display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px',
     }}>
       <div>
-        <div style={{ color: '#7ab3f0', fontSize: '13px', fontFamily: "'Syne', sans-serif", fontWeight: 700, marginBottom: '4px' }}>
-          ⚡ Upgrade to Pro
-        </div>
-        <div style={{ color: '#3a5a80', fontSize: '11px', fontFamily: "'JetBrains Mono', monospace" }}>
-          Unlimited refreshes · Email digest · Custom categories
-        </div>
+        <div style={{ color: '#7ab3f0', fontSize: '13px', fontFamily: "'Syne', sans-serif", fontWeight: 700, marginBottom: '4px' }}>⚡ Upgrade to Pro</div>
+        <div style={{ color: '#3a5a80', fontSize: '11px', fontFamily: "'JetBrains Mono', monospace" }}>Unlimited refreshes · Email digest · Custom categories</div>
       </div>
-      <button style={{
-        background: '#3a7bd5', border: 'none', color: '#fff',
+      <button onClick={onUpgrade} disabled={upgrading} style={{
+        background: upgrading ? '#1a2e50' : '#3a7bd5', border: 'none', color: '#fff',
         borderRadius: '6px', padding: '8px 18px', fontSize: '12px',
-        fontFamily: "'JetBrains Mono', monospace", cursor: 'pointer', fontWeight: 700,
+        fontFamily: "'JetBrains Mono', monospace", cursor: upgrading ? 'not-allowed' : 'pointer', fontWeight: 700,
       }}>
-        Get Pro — $7/mo
+        {upgrading ? 'Redirecting...' : 'Get Pro — $7/mo'}
       </button>
     </div>
   )
@@ -98,20 +103,33 @@ export default function Home() {
   const [error, setError] = useState(null)
   const [cooldown, setCooldown] = useState(0)
   const [hasUsedFreeRefresh, setHasUsedFreeRefresh] = useState(false)
+  const [upgrading, setUpgrading] = useState(false)
 
   useEffect(() => {
     if (!isSignedIn) {
       const lastRefresh = localStorage.getItem('cyberbrief_last_refresh')
       if (lastRefresh) {
         const daysSince = (Date.now() - parseInt(lastRefresh)) / (1000 * 60 * 60 * 24)
-        if (daysSince < FREE_REFRESH_INTERVAL_DAYS) {
-          setHasUsedFreeRefresh(true)
-        }
+        if (daysSince < FREE_REFRESH_INTERVAL_DAYS) setHasUsedFreeRefresh(true)
       }
     }
   }, [isSignedIn])
 
   const canRefresh = isSignedIn || !hasUsedFreeRefresh
+
+  async function handleUpgrade() {
+    if (!isSignedIn) return
+    setUpgrading(true)
+    try {
+      const res = await fetch('/api/create-checkout', { method: 'POST' })
+      const data = await res.json()
+      if (data.url) window.location.href = data.url
+      else throw new Error(data.error)
+    } catch (err) {
+      alert('Could not start checkout: ' + err.message)
+      setUpgrading(false)
+    }
+  }
 
   async function fetchNews() {
     if (!canRefresh) return
@@ -152,7 +170,7 @@ export default function Home() {
       <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0, backgroundImage: 'linear-gradient(#0d1628 1px, transparent 1px), linear-gradient(90deg, #0d1628 1px, transparent 1px)', backgroundSize: '40px 40px', opacity: 0.4 }} />
       <div style={{ position: 'fixed', left: 0, right: 0, height: '80px', zIndex: 0, pointerEvents: 'none', background: 'linear-gradient(transparent, rgba(58,123,213,0.03), transparent)', animation: 'scanline 8s linear infinite' }} />
 
-      <AuthBar isSignedIn={isSignedIn} />
+      <AuthBar isSignedIn={isSignedIn} onUpgrade={handleUpgrade} upgrading={upgrading} />
 
       <div style={{ position: 'relative', zIndex: 1, maxWidth: '860px', margin: '0 auto', padding: '80px 20px 40px' }}>
         <div style={{ marginBottom: '36px' }}>
@@ -165,11 +183,10 @@ export default function Home() {
           </h1>
           <p style={{ color: '#2a4060', fontSize: '13px', fontFamily: "'JetBrains Mono', monospace" }}>
             AI-curated threat intelligence · Updated {lastFetched ? lastFetched.toLocaleTimeString() : '—'}
-            {isSignedIn && <span style={{ color: '#4ade80', marginLeft: '10px' }}>● Pro</span>}
           </p>
         </div>
 
-        {!isSignedIn && hasUsedFreeRefresh && <UpgradeBanner />}
+        {!isSignedIn && hasUsedFreeRefresh && <UpgradeBanner onUpgrade={handleUpgrade} upgrading={upgrading} />}
 
         {!isSignedIn && hasUsedFreeRefresh && articles.length === 0 && (
           <div style={{ textAlign: 'center', padding: '60px 20px', border: '1px dashed #1e3a5f', borderRadius: '12px' }}>
