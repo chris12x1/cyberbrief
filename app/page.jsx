@@ -24,7 +24,7 @@ function LoadingCard({ index }) {
   )
 }
 
-function AuthBar({ isSignedIn, onUpgrade, upgrading }) {
+function AuthBar({ isSignedIn, isPro, onUpgrade, upgrading }) {
   return (
     <div style={{
       position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
@@ -56,14 +56,24 @@ function AuthBar({ isSignedIn, onUpgrade, upgrading }) {
           </>
         ) : (
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-            <button onClick={onUpgrade} disabled={upgrading} style={{
-              background: upgrading ? '#0a1120' : '#3a7bd5',
-              border: 'none', color: '#fff', borderRadius: '6px', padding: '5px 14px',
-              fontSize: '11px', fontFamily: "'JetBrains Mono', monospace",
-              cursor: upgrading ? 'not-allowed' : 'pointer', fontWeight: 700,
-            }}>
-              {upgrading ? 'Redirecting...' : '⚡ Get Pro — $7/mo'}
-            </button>
+            {!isPro && (
+              <button onClick={onUpgrade} disabled={upgrading} style={{
+                background: upgrading ? '#0a1120' : '#3a7bd5',
+                border: 'none', color: '#fff', borderRadius: '6px', padding: '5px 14px',
+                fontSize: '11px', fontFamily: "'JetBrains Mono', monospace",
+                cursor: upgrading ? 'not-allowed' : 'pointer', fontWeight: 700,
+              }}>
+                {upgrading ? 'Redirecting...' : '⚡ Get Pro — $7/mo'}
+              </button>
+            )}
+            {isPro && (
+              <span style={{
+                color: '#4ade80', fontSize: '11px',
+                fontFamily: "'JetBrains Mono', monospace",
+                border: '1px solid #4ade8044', borderRadius: '6px',
+                padding: '4px 10px', background: '#4ade8011',
+              }}>● PRO</span>
+            )}
             <UserButton afterSignOutUrl="/" />
           </div>
         )}
@@ -96,6 +106,7 @@ function UpgradeBanner({ onUpgrade, upgrading }) {
 
 export default function Home() {
   const { isSignedIn } = useUser()
+  const [isPro, setIsPro] = useState(false)
   const [articles, setArticles] = useState([])
   const [loading, setLoading] = useState(false)
   const [activeCategory, setActive] = useState('All')
@@ -104,6 +115,18 @@ export default function Home() {
   const [cooldown, setCooldown] = useState(0)
   const [hasUsedFreeRefresh, setHasUsedFreeRefresh] = useState(false)
   const [upgrading, setUpgrading] = useState(false)
+
+  // Check pro status from DB
+  useEffect(() => {
+    if (isSignedIn) {
+      fetch('/api/user-status')
+        .then(r => r.json())
+        .then(data => setIsPro(data.isPro || false))
+        .catch(() => setIsPro(false))
+    } else {
+      setIsPro(false)
+    }
+  }, [isSignedIn])
 
   useEffect(() => {
     if (!isSignedIn) {
@@ -115,7 +138,7 @@ export default function Home() {
     }
   }, [isSignedIn])
 
-  const canRefresh = isSignedIn || !hasUsedFreeRefresh
+  const canRefresh = isPro || !hasUsedFreeRefresh || (isSignedIn && !isPro)
 
   async function handleUpgrade() {
     if (!isSignedIn) return
@@ -132,11 +155,10 @@ export default function Home() {
   }
 
   async function fetchNews() {
-    if (!canRefresh) return
     setLoading(true)
     setError(null)
     setArticles([])
-    if (!isSignedIn) {
+    if (!isSignedIn && !isPro) {
       localStorage.setItem('cyberbrief_last_refresh', Date.now().toString())
       setHasUsedFreeRefresh(true)
     }
@@ -146,10 +168,12 @@ export default function Home() {
       if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`)
       setArticles(data.articles)
       setLastFetched(new Date())
-      setCooldown(30)
-      const timer = setInterval(() => {
-        setCooldown(prev => { if (prev <= 1) { clearInterval(timer); return 0 } return prev - 1 })
-      }, 1000)
+      if (!isPro) {
+        setCooldown(30)
+        const timer = setInterval(() => {
+          setCooldown(prev => { if (prev <= 1) { clearInterval(timer); return 0 } return prev - 1 })
+        }, 1000)
+      }
     } catch (err) {
       setError(err.message)
     } finally {
@@ -157,7 +181,7 @@ export default function Home() {
     }
   }
 
-  useEffect(() => { if (canRefresh) fetchNews() }, [isSignedIn])
+  useEffect(() => { fetchNews() }, [isSignedIn, isPro])
 
   const filtered = activeCategory === 'All' ? articles : articles.filter(a => a.category === activeCategory)
   const counts = CATEGORIES.reduce((acc, cat) => {
@@ -170,7 +194,7 @@ export default function Home() {
       <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0, backgroundImage: 'linear-gradient(#0d1628 1px, transparent 1px), linear-gradient(90deg, #0d1628 1px, transparent 1px)', backgroundSize: '40px 40px', opacity: 0.4 }} />
       <div style={{ position: 'fixed', left: 0, right: 0, height: '80px', zIndex: 0, pointerEvents: 'none', background: 'linear-gradient(transparent, rgba(58,123,213,0.03), transparent)', animation: 'scanline 8s linear infinite' }} />
 
-      <AuthBar isSignedIn={isSignedIn} onUpgrade={handleUpgrade} upgrading={upgrading} />
+      <AuthBar isSignedIn={isSignedIn} isPro={isPro} onUpgrade={handleUpgrade} upgrading={upgrading} />
 
       <div style={{ position: 'relative', zIndex: 1, maxWidth: '860px', margin: '0 auto', padding: '80px 20px 40px' }}>
         <div style={{ marginBottom: '36px' }}>
@@ -183,17 +207,18 @@ export default function Home() {
           </h1>
           <p style={{ color: '#2a4060', fontSize: '13px', fontFamily: "'JetBrains Mono', monospace" }}>
             AI-curated threat intelligence · Updated {lastFetched ? lastFetched.toLocaleTimeString() : '—'}
+            {' '}· <span style={{ color: '#1a3050' }}>AI-summarized — verify with primary sources</span>
           </p>
         </div>
 
-        {!isSignedIn && hasUsedFreeRefresh && <UpgradeBanner onUpgrade={handleUpgrade} upgrading={upgrading} />}
+        {isSignedIn && !isPro && <UpgradeBanner onUpgrade={handleUpgrade} upgrading={upgrading} />}
 
         {!isSignedIn && hasUsedFreeRefresh && articles.length === 0 && (
           <div style={{ textAlign: 'center', padding: '60px 20px', border: '1px dashed #1e3a5f', borderRadius: '12px' }}>
             <div style={{ fontSize: '32px', marginBottom: '12px' }}>🔒</div>
             <div style={{ color: '#c8d8f0', fontSize: '16px', fontFamily: "'Syne', sans-serif", fontWeight: 700, marginBottom: '8px' }}>Weekly refresh used</div>
             <div style={{ color: '#2a4060', fontSize: '12px', fontFamily: "'JetBrains Mono', monospace", marginBottom: '20px' }}>
-              Sign up free to get another refresh, or go Pro for unlimited access.
+              Sign up free to get more refreshes, or go Pro for unlimited access.
             </div>
             <SignUpButton mode="modal">
               <button style={{
@@ -222,18 +247,16 @@ export default function Home() {
                 )}
               </button>
             ))}
-            {canRefresh && (
-              <button onClick={fetchNews} disabled={loading || cooldown > 0} style={{
-                marginLeft: 'auto', background: (loading || cooldown > 0) ? '#0a1120' : '#0f1e35',
-                border: '1px solid #1e3a5f', color: (loading || cooldown > 0) ? '#1a3050' : '#3a7bd5',
-                borderRadius: '6px', padding: '5px 14px', fontSize: '11px',
-                fontFamily: "'JetBrains Mono', monospace", cursor: (loading || cooldown > 0) ? 'not-allowed' : 'pointer',
-                display: 'flex', alignItems: 'center', gap: '6px',
-              }}>
-                <span style={{ display: 'inline-block', animation: loading ? 'spin 1s linear infinite' : 'none' }}>↻</span>
-                {loading ? 'Fetching...' : cooldown > 0 ? `Wait ${cooldown}s` : 'Refresh'}
-              </button>
-            )}
+            <button onClick={fetchNews} disabled={loading || (!isPro && cooldown > 0)} style={{
+              marginLeft: 'auto', background: (loading || (!isPro && cooldown > 0)) ? '#0a1120' : '#0f1e35',
+              border: '1px solid #1e3a5f', color: (loading || (!isPro && cooldown > 0)) ? '#1a3050' : '#3a7bd5',
+              borderRadius: '6px', padding: '5px 14px', fontSize: '11px',
+              fontFamily: "'JetBrains Mono', monospace", cursor: (loading || (!isPro && cooldown > 0)) ? 'not-allowed' : 'pointer',
+              display: 'flex', alignItems: 'center', gap: '6px',
+            }}>
+              <span style={{ display: 'inline-block', animation: loading ? 'spin 1s linear infinite' : 'none' }}>↻</span>
+              {loading ? 'Fetching...' : (!isPro && cooldown > 0) ? `Wait ${cooldown}s` : 'Refresh'}
+            </button>
           </div>
         )}
 
