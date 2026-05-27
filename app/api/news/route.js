@@ -1,7 +1,21 @@
 import { GoogleGenAI } from '@google/genai'
+import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
+import {
+  getUser,
+  checkAnonymousLimit,
+  recordAnonymousRefresh,
+  checkSignedInFreeLimit,
+  recordSignedInRefresh,
+} from '../../lib/db'
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })
+
+function getClientIp(req) {
+  const forwarded = req.headers.get('x-forwarded-for')
+  if (forwarded) return forwarded.split(',')[0].trim()
+  return req.headers.get('x-real-ip') || 'unknown'
+}
 
 async function generateWithRetry(prompt, retries = 3) {
   for (let i = 0; i < retries; i++) {
@@ -9,9 +23,7 @@ async function generateWithRetry(prompt, retries = 3) {
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: prompt,
-        config: {
-          tools: [{ googleSearch: {} }],
-        },
+        config: { tools: [{ googleSearch: {} }] },
       })
       return response
     } catch (err) {
@@ -25,7 +37,35 @@ async function generateWithRetry(prompt, retries = 3) {
   }
 }
 
-export async function POST() {
+export async function POST(req) {
+  const { userId } = await auth()
+  const ip = getClientIp(req)
+
+  // Check rate limit BEFORE calling expensive Gemini API
+  if (!userId) {
+    // Anonymous visitor — check IP limit
+    const limit = await checkAnonymousLimit(ip)
+    if (!limit.allowed) {
+      return NextResponse.json({
+        error: `Free weekly refresh used. Sign up free to get more, or upgrade to Pro for unlimited access. Try again in ${limit.hoursUntilNextRefresh} hours.`,
+        isLimit: true,
+      }, { status: 429 })
+    }
+  } else {
+    // Signed-in user — check if Pro
+    const user = await getUser(userId)
+    if (!user?.is_pro) {
+      const limit = await checkSignedInFreeLimit(userId)
+      if (!limit.allowed) {
+        return NextResponse.json({
+          error: `Free weekly refresh used. Upgrade to Pro for unlimited access. Try again in ${limit.hoursUntilNextRefresh} hours.`,
+          isLimit: true,
+        }, { status: 429 })
+      }
+    }
+    // Pro users skip all limits
+  }
+
   const today = new Date().toLocaleDateString('en-US', {
     month: 'long', day: 'numeric', year: 'numeric',
   })
@@ -54,19 +94,30 @@ Your entire response must be a raw JSON array starting with [ and ending with ].
     const match = text.match(/\[[\s\S]*\]/)
     if (!match) {
       return NextResponse.json(
-        { error: 'No JSON array in model response. Preview: ' + text.slice(0, 300) },
+        { error: 'No JSON array in model response.' },
         { status: 500 }
       )
     }
 
     const articles = JSON.parse(match[0])
+
+    // Record the refresh AFTER successful fetch
+    if (!userId) {
+      await recordAnonymousRefresh(ip)
+    } else {
+      const user = await getUser(userId)
+      if (!user?.is_pro) {
+        await recordSignedInRefresh(userId)
+      }
+    }
+
     return NextResponse.json({ articles })
   } catch (err) {
     console.error('CyberBrief API error:', err)
     const is429 = err.message?.includes('429') || err.message?.includes('Too Many Requests')
     if (is429) {
       return NextResponse.json(
-        { error: 'Rate limit hit — please wait 30 seconds and try again.' },
+        { error: 'Service is busy — please wait 30 seconds and try again.' },
         { status: 429 }
       )
     }
