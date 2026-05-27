@@ -73,17 +73,41 @@ Open [http://localhost:3000](http://localhost:3000)
 ```
 cyberbrief/
 ├── app/
+│   ├── about/
+│   │   └── page.jsx
 │   ├── api/
-│   │   └── news/
-│   │       └── route.js       # Backend — Gemini API call (key stays secret)
+│   │   ├── create-checkout/
+│   │   │   └── route.js
+│   │   ├── news/
+│   │   │   └── route.js       # Backend — Gemini API call (key stays secret)
+│   │   ├── refresh-status/
+│   │   │   └── route.js
+│   │   ├── setup-db/
+│   │   │   └── route.js
+│   │   ├── user-status/
+│   │   │   └── route.js
+│   │   └── webhook/
+│   │       └── route.js
 │   ├── components/
 │   │   └── NewsCard.jsx       # Expandable article card
+│   ├── contact/
+│   │   └── page.jsx
+│   ├── lib/
+│   │   └── db.js
+│   ├── success/
+│   │   └── page.jsx
 │   ├── globals.css            # Global styles + animations
 │   ├── layout.jsx             # Root layout
 │   └── page.jsx               # Main dashboard UI
 ├── .env.example               # Environment variable template
+├── .gitignore
+├── LICENSE
+├── README.md
+├── middleware.js
 ├── next.config.js
-└── package.json
+├── package-lock.json
+├── package.json
+└── tailwind.config.js
 ```
 ## 🔑 Environment Variables
 
