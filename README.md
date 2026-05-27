@@ -70,20 +70,21 @@ Open [http://localhost:3000](http://localhost:3000)
 
 ## 📁 Project Structure
 
+```
 cyberbrief/
 ├── app/
 │   ├── api/
 │   │   └── news/
-│   │       └── route.js      # Backend — Gemini API call (key stays secret)
+│   │       └── route.js       # Backend — Gemini API call (key stays secret)
 │   ├── components/
-│   │   └── NewsCard.jsx      # Expandable article card
-│   ├── page.jsx              # Main dashboard UI
-│   ├── layout.jsx            # Root layout
-│   └── globals.css           # Global styles + animations
-├── .env.example              # Environment variable template
+│   │   └── NewsCard.jsx       # Expandable article card
+│   ├── globals.css            # Global styles + animations
+│   ├── layout.jsx             # Root layout
+│   └── page.jsx               # Main dashboard UI
+├── .env.example               # Environment variable template
 ├── next.config.js
 └── package.json
-
+```
 ## 🔑 Environment Variables
 
 | Variable | Description | Where to get it |
