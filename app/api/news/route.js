@@ -7,6 +7,8 @@ import {
   recordAnonymousRefresh,
   checkSignedInFreeLimit,
   recordSignedInRefresh,
+  checkProLimit,
+  recordProRefresh,
 } from '../../lib/db'
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })
@@ -37,24 +39,33 @@ async function generateWithRetry(prompt, retries = 3) {
   }
 }
 
+function formatTimeRemaining(minutes) {
+  if (minutes < 60) return `${minutes} minute${minutes !== 1 ? 's' : ''}`
+  const hours = Math.floor(minutes / 60)
+  const mins = minutes % 60
+  if (mins === 0) return `${hours} hour${hours !== 1 ? 's' : ''}`
+  return `${hours}h ${mins}m`
+}
+
 export async function POST(req) {
   const { userId } = await auth()
   const ip = getClientIp(req)
 
-  // Check rate limit BEFORE calling expensive Gemini API
+  let userIsPro = false
+
   if (!userId) {
-    // Anonymous visitor — check IP limit
     const limit = await checkAnonymousLimit(ip)
     if (!limit.allowed) {
       return NextResponse.json({
-        error: `Free weekly refresh used. Sign up free to get more, or upgrade to Pro for unlimited access. Try again in ${limit.hoursUntilNextRefresh} hours.`,
+        error: `Free weekly refresh used. Sign up free for more, or upgrade to Pro for unlimited access. Try again in ${limit.hoursUntilNextRefresh} hours.`,
         isLimit: true,
       }, { status: 429 })
     }
   } else {
-    // Signed-in user — check if Pro
     const user = await getUser(userId)
-    if (!user?.is_pro) {
+    userIsPro = user?.is_pro || false
+
+    if (!userIsPro) {
       const limit = await checkSignedInFreeLimit(userId)
       if (!limit.allowed) {
         return NextResponse.json({
@@ -62,8 +73,17 @@ export async function POST(req) {
           isLimit: true,
         }, { status: 429 })
       }
+    } else {
+      // Pro user — check 4-hour cooldown
+      const limit = await checkProLimit(userId)
+      if (!limit.allowed) {
+        const timeStr = formatTimeRemaining(limit.minutesUntilNextRefresh)
+        return NextResponse.json({
+          error: `Pro refresh cooldown — please try again in ${timeStr}. News cycles update every few hours, so the data won't change much before then.`,
+          isLimit: true,
+        }, { status: 429 })
+      }
     }
-    // Pro users skip all limits
   }
 
   const today = new Date().toLocaleDateString('en-US', {
@@ -104,11 +124,10 @@ Your entire response must be a raw JSON array starting with [ and ending with ].
     // Record the refresh AFTER successful fetch
     if (!userId) {
       await recordAnonymousRefresh(ip)
+    } else if (!userIsPro) {
+      await recordSignedInRefresh(userId)
     } else {
-      const user = await getUser(userId)
-      if (!user?.is_pro) {
-        await recordSignedInRefresh(userId)
-      }
+      await recordProRefresh(userId)
     }
 
     return NextResponse.json({ articles })

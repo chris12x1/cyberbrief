@@ -16,7 +16,6 @@ export async function setupDatabase() {
     )
   `
 
-  // Track anonymous (signed-out) users by IP
   await sql`
     CREATE TABLE IF NOT EXISTS anonymous_refreshes (
       id SERIAL PRIMARY KEY,
@@ -26,9 +25,18 @@ export async function setupDatabase() {
     )
   `
 
-  // Track signed-in free user usage (for future per-account limits)
   await sql`
     CREATE TABLE IF NOT EXISTS user_refreshes (
+      id SERIAL PRIMARY KEY,
+      clerk_user_id TEXT UNIQUE NOT NULL,
+      last_refresh_at TIMESTAMP DEFAULT NOW(),
+      refresh_count INT DEFAULT 1
+    )
+  `
+
+  // Pro user refresh tracking
+  await sql`
+    CREATE TABLE IF NOT EXISTS pro_refreshes (
       id SERIAL PRIMARY KEY,
       clerk_user_id TEXT UNIQUE NOT NULL,
       last_refresh_at TIMESTAMP DEFAULT NOW(),
@@ -76,19 +84,13 @@ export async function setUserNotPro(stripeSubscriptionId) {
   return rows[0]
 }
 
-// Anonymous (signed-out) IP-based limit
-// Returns { allowed: boolean, hoursUntilNextRefresh: number }
 export async function checkAnonymousLimit(ipAddress) {
-  const FREE_HOURS = 168 // 7 days
-
+  const FREE_HOURS = 168
   const rows = await sql`SELECT * FROM anonymous_refreshes WHERE ip_address = ${ipAddress}`
   if (rows.length === 0) return { allowed: true, hoursUntilNextRefresh: 0 }
-
   const lastRefresh = new Date(rows[0].last_refresh_at)
   const hoursSince = (Date.now() - lastRefresh.getTime()) / (1000 * 60 * 60)
-
   if (hoursSince >= FREE_HOURS) return { allowed: true, hoursUntilNextRefresh: 0 }
-
   return { allowed: false, hoursUntilNextRefresh: Math.ceil(FREE_HOURS - hoursSince) }
 }
 
@@ -101,18 +103,13 @@ export async function recordAnonymousRefresh(ipAddress) {
   `
 }
 
-// Signed-in free user limit (also weekly)
 export async function checkSignedInFreeLimit(clerkUserId) {
-  const FREE_HOURS = 168 // 7 days
-
+  const FREE_HOURS = 168
   const rows = await sql`SELECT * FROM user_refreshes WHERE clerk_user_id = ${clerkUserId}`
   if (rows.length === 0) return { allowed: true, hoursUntilNextRefresh: 0 }
-
   const lastRefresh = new Date(rows[0].last_refresh_at)
   const hoursSince = (Date.now() - lastRefresh.getTime()) / (1000 * 60 * 60)
-
   if (hoursSince >= FREE_HOURS) return { allowed: true, hoursUntilNextRefresh: 0 }
-
   return { allowed: false, hoursUntilNextRefresh: Math.ceil(FREE_HOURS - hoursSince) }
 }
 
@@ -122,5 +119,25 @@ export async function recordSignedInRefresh(clerkUserId) {
     VALUES (${clerkUserId}, NOW(), 1)
     ON CONFLICT (clerk_user_id) DO UPDATE
     SET last_refresh_at = NOW(), refresh_count = user_refreshes.refresh_count + 1
+  `
+}
+
+// Pro users: 1 refresh every 4 hours
+export async function checkProLimit(clerkUserId) {
+  const PRO_HOURS = 4
+  const rows = await sql`SELECT * FROM pro_refreshes WHERE clerk_user_id = ${clerkUserId}`
+  if (rows.length === 0) return { allowed: true, minutesUntilNextRefresh: 0 }
+  const lastRefresh = new Date(rows[0].last_refresh_at)
+  const hoursSince = (Date.now() - lastRefresh.getTime()) / (1000 * 60 * 60)
+  if (hoursSince >= PRO_HOURS) return { allowed: true, minutesUntilNextRefresh: 0 }
+  return { allowed: false, minutesUntilNextRefresh: Math.ceil((PRO_HOURS - hoursSince) * 60) }
+}
+
+export async function recordProRefresh(clerkUserId) {
+  await sql`
+    INSERT INTO pro_refreshes (clerk_user_id, last_refresh_at, refresh_count)
+    VALUES (${clerkUserId}, NOW(), 1)
+    ON CONFLICT (clerk_user_id) DO UPDATE
+    SET last_refresh_at = NOW(), refresh_count = pro_refreshes.refresh_count + 1
   `
 }
