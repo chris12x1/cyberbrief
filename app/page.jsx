@@ -130,7 +130,7 @@ function AuthBar({ isSignedIn, isPro, onUpgrade, upgrading }) {
   )
 }
 
-function PreviewBanner({ onLoad, loading }) {
+function PreviewBanner() {
   return (
     <div style={{
       background: 'linear-gradient(135deg, #0f1e35, #1a2e50)',
@@ -142,16 +142,18 @@ function PreviewBanner({ onLoad, loading }) {
           👀 You're viewing sample threats
         </div>
         <div style={{ color: '#5a7a9a', fontSize: '12px', fontFamily: "'JetBrains Mono', monospace" }}>
-          Click below to load real, live cybersecurity intelligence from the last 48 hours.
+          Sign up free to load real, live cybersecurity intelligence from the last 48 hours.
         </div>
       </div>
-      <button onClick={onLoad} disabled={loading} style={{
-        background: loading ? '#1a2e50' : '#3a7bd5', border: 'none', color: '#fff',
-        borderRadius: '6px', padding: '10px 22px', fontSize: '12px',
-        fontFamily: "'JetBrains Mono', monospace", cursor: loading ? 'wait' : 'pointer', fontWeight: 700,
-      }}>
-        {loading ? '⏳ Loading...' : '⚡ Load Live Threats'}
-      </button>
+      <SignUpButton mode="modal">
+        <button style={{
+          background: '#3a7bd5', border: 'none', color: '#fff',
+          borderRadius: '6px', padding: '10px 22px', fontSize: '12px',
+          fontFamily: "'JetBrains Mono', monospace", cursor: 'pointer', fontWeight: 700,
+        }}>
+          🔓 Sign Up Free
+        </button>
+      </SignUpButton>
     </div>
   )
 }
@@ -211,6 +213,25 @@ function Footer() {
       borderTop: '1px solid #111c30',
       textAlign: 'center',
     }}>
+      <div style={{
+        display: 'flex', justifyContent: 'center', gap: '20px', marginBottom: '20px', flexWrap: 'wrap',
+      }}>
+        <a href="/about" style={{
+          color: '#3a7bd5', fontSize: '11px',
+          fontFamily: "'JetBrains Mono', monospace",
+          textDecoration: 'none',
+        }}>About</a>
+        <a href="/contact" style={{
+          color: '#3a7bd5', fontSize: '11px',
+          fontFamily: "'JetBrains Mono', monospace",
+          textDecoration: 'none',
+        }}>Contact</a>
+        <a href="https://github.com/chris12x1/cyberbrief" target="_blank" rel="noopener noreferrer" style={{
+          color: '#3a7bd5', fontSize: '11px',
+          fontFamily: "'JetBrains Mono', monospace",
+          textDecoration: 'none',
+        }}>GitHub</a>
+      </div>
       <div style={{
         color: '#2a4060', fontSize: '11px',
         fontFamily: "'JetBrains Mono', monospace",
@@ -375,8 +396,8 @@ export default function Home() {
         </div>
 
         {/* Show preview banner when displaying samples */}
-        {isShowingSamples && !isLockedOut && (
-          <PreviewBanner onLoad={fetchNews} loading={loading} />
+        {!isSignedIn && isShowingSamples && (
+          <PreviewBanner />
         )}
 
         {/* Show locked banner if rate limited */}
