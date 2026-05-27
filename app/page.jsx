@@ -261,18 +261,21 @@ export default function Home() {
 
   // Poll refresh status to update cooldown timer
   async function checkRefreshStatus() {
-    if (!isSignedIn) {
-      setCooldownMinutes(0)
-      return
-    }
     try {
       const res = await fetch('/api/refresh-status')
       const data = await res.json()
       setCooldownMinutes(data.cooldownMinutes || 0)
+      // If anonymous user is locked out, also set locked state
+      if (!isSignedIn && !data.allowed) {
+        setIsLockedOut(true)
+      }
     } catch (e) { /* ignore */ }
   }
 
   useEffect(() => {
+    // Always check refresh status — for anonymous users too
+    checkRefreshStatus()
+
     if (isSignedIn) {
       fetch('/api/user-status')
         .then(r => r.json())
@@ -284,11 +287,8 @@ export default function Home() {
           }
         })
         .catch(() => setIsPro(false))
-
-      checkRefreshStatus()
     } else {
       setIsPro(false)
-      setCooldownMinutes(0)
     }
   }, [isSignedIn])
 
