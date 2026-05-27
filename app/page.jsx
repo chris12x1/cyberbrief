@@ -262,7 +262,14 @@ export default function Home() {
     if (isSignedIn) {
       fetch('/api/user-status')
         .then(r => r.json())
-        .then(data => setIsPro(data.isPro || false))
+        .then(data => {
+          const proStatus = data.isPro || false
+          setIsPro(proStatus)
+          // Auto-fetch live news for signed-in users (no cached real news yet)
+          if (isShowingSamples) {
+            fetchNews()
+          }
+        })
         .catch(() => setIsPro(false))
     } else {
       setIsPro(false)
