@@ -5,6 +5,55 @@ import NewsCard from './components/NewsCard'
 
 const CATEGORIES = ['All', 'Vulnerabilities', 'Data Breaches', 'Malware', 'Nation-State', 'Zero-Day']
 
+// Sample news shown to first-time visitors so they see what the product looks like
+const SAMPLE_ARTICLES = [
+  {
+    title: "Critical SQL Injection Flaw in Drupal Core Under Mass Exploitation",
+    tldr: "A critical SQL injection vulnerability (CVSS 9.8) in Drupal sites running PostgreSQL is being actively exploited just 48 hours after patch release.",
+    summary: "A highly severe SQL injection vulnerability in Drupal core is currently facing mass exploitation. The flaw allows unauthenticated attackers to inject arbitrary SQL commands, potentially leading to data disclosure, privilege escalation, and remote code execution. CISA has added this to its Known Exploited Vulnerabilities catalog, urging immediate patching.",
+    severity: "critical",
+    category: "Vulnerabilities",
+    source: "The Hacker News",
+    date: "Sample",
+  },
+  {
+    title: "Major Health System Discloses Breach Impacting 1.8 Million Patients",
+    tldr: "Healthcare provider confirmed a data breach exposing sensitive patient and employee data including medical records and biometric information, through a third-party vendor.",
+    summary: "Attackers gained unauthorized access to systems over a multi-month period, exfiltrating personal information, medical records, insurance details, Social Security numbers, and biometric data. The incident stemmed from a compromise at an unnamed third-party vendor with access to internal systems — fitting a growing pattern of supply-chain compromises in healthcare.",
+    severity: "high",
+    category: "Data Breaches",
+    source: "SecurityAffairs",
+    date: "Sample",
+  },
+  {
+    title: "New Fileless Malware Spreads via ClickFix Social Engineering",
+    tldr: "A new fileless malware loader uses ClickFix social engineering to trick users into executing PowerShell commands, then steals credentials and keystrokes.",
+    summary: "The malware loader is spreading through a social-engineering tactic called ClickFix. Once active, it decrypts its payload in memory and injects it into legitimate Windows processes. It deploys a credential stealer and a malicious browser extension to capture saved passwords and keystrokes. The malware further propagates by dropping shortcut files onto USB drives.",
+    severity: "high",
+    category: "Malware",
+    source: "SOC Prime",
+    date: "Sample",
+  },
+  {
+    title: "Verizon DBIR: Vulnerability Exploitation Now Top Breach Vector",
+    tldr: "Latest Verizon Data Breach Investigations Report shows software vulnerability exploitation has surpassed stolen credentials as the leading cause of corporate breaches.",
+    summary: "Vulnerability exploitation now accounts for 31% of confirmed data breaches — the first time in nearly two decades it has exceeded stolen credentials (which dropped to 13%). The report highlights that AI is increasingly used by attackers to exploit flaws faster than companies can patch them, and ransomware was present in nearly half of all breaches.",
+    severity: "info",
+    category: "Vulnerabilities",
+    source: "TechRadar",
+    date: "Sample",
+  },
+  {
+    title: "Ransomware Groups Pivot from Encryption to Pure Data Extortion",
+    tldr: "Ransomware operators are increasingly skipping encryption entirely, opting for pure data theft and public-leak threats due to declining ransom payment rates.",
+    summary: "A notable shift in the threat landscape sees ransomware groups moving away from traditional data encryption. Instead, they focus on pure extortion — stealing sensitive data and threatening its public release if ransom isn't paid. This change is driven by the economics of cybercrime: encryption is more detectable and less profitable. The new pressure point is reputational damage and regulatory exposure rather than operational disruption.",
+    severity: "high",
+    category: "Malware",
+    source: "SecurityAffairs",
+    date: "Sample",
+  },
+]
+
 function LoadingCard({ index }) {
   return (
     <div style={{
@@ -81,52 +130,54 @@ function AuthBar({ isSignedIn, isPro, onUpgrade, upgrading }) {
   )
 }
 
-function HeroSection({ onSignUp, onFetch, loading }) {
+function PreviewBanner({ onLoad, loading }) {
   return (
     <div style={{
-      textAlign: 'center', padding: '60px 20px',
-      border: '1px solid #111c30', borderRadius: '12px',
-      background: 'linear-gradient(135deg, #0a1120, #0f1a2e)',
-      marginBottom: '20px',
+      background: 'linear-gradient(135deg, #0f1e35, #1a2e50)',
+      border: '1px solid #3a7bd5', borderRadius: '8px', padding: '20px 24px', marginBottom: '20px',
+      display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px',
     }}>
-      <div style={{ fontSize: '40px', marginBottom: '12px' }}>🔐</div>
-      <h2 style={{
-        color: '#c8d8f0', fontSize: 'clamp(20px,3vw,28px)',
-        fontFamily: "'Syne', sans-serif", fontWeight: 800,
-        marginBottom: '10px', letterSpacing: '-0.01em',
-      }}>
-        AI-curated cybersecurity intelligence
-      </h2>
-      <p style={{
-        color: '#5a7a9a', fontSize: '13px',
-        fontFamily: "'DM Sans', sans-serif",
-        marginBottom: '24px', maxWidth: '480px', margin: '0 auto 24px',
-        lineHeight: 1.6,
-      }}>
-        The 8 most important cybersecurity stories from the last 48 hours — summarized, severity-rated, and verified against primary sources.
-      </p>
-      <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
-        <button onClick={onFetch} disabled={loading} style={{
-          background: loading ? '#1a2e50' : '#3a7bd5', border: 'none', color: '#fff',
-          borderRadius: '6px', padding: '12px 24px', fontSize: '13px',
-          fontFamily: "'JetBrains Mono', monospace", cursor: loading ? 'wait' : 'pointer', fontWeight: 700,
-        }}>
-          {loading ? '⏳ Fetching...' : '⚡ Load Latest Threats'}
-        </button>
-        <SignUpButton mode="modal">
-          <button style={{
-            background: 'transparent', border: '1px solid #1e3a5f',
-            color: '#3a7bd5', borderRadius: '6px', padding: '12px 24px',
-            fontSize: '13px', fontFamily: "'JetBrains Mono', monospace", cursor: 'pointer',
-          }}>Sign Up Free</button>
-        </SignUpButton>
+      <div>
+        <div style={{ color: '#7ab3f0', fontSize: '14px', fontFamily: "'Syne', sans-serif", fontWeight: 700, marginBottom: '4px' }}>
+          👀 You're viewing sample threats
+        </div>
+        <div style={{ color: '#5a7a9a', fontSize: '12px', fontFamily: "'JetBrains Mono', monospace" }}>
+          Click below to load real, live cybersecurity intelligence from the last 48 hours.
+        </div>
       </div>
-      <p style={{
-        color: '#2a4060', fontSize: '10px', marginTop: '20px',
-        fontFamily: "'JetBrains Mono', monospace",
+      <button onClick={onLoad} disabled={loading} style={{
+        background: loading ? '#1a2e50' : '#3a7bd5', border: 'none', color: '#fff',
+        borderRadius: '6px', padding: '10px 22px', fontSize: '12px',
+        fontFamily: "'JetBrains Mono', monospace", cursor: loading ? 'wait' : 'pointer', fontWeight: 700,
       }}>
-        Free: 1 refresh/week · Pro $7/mo: 1 refresh every 4 hours
-      </p>
+        {loading ? '⏳ Loading...' : '⚡ Load Live Threats'}
+      </button>
+    </div>
+  )
+}
+
+function LockedBanner() {
+  return (
+    <div style={{
+      background: 'linear-gradient(135deg, #1a0f00, #2e1a00)',
+      border: '1px solid #ff7b00', borderRadius: '8px', padding: '20px 24px', marginBottom: '20px',
+      display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px',
+    }}>
+      <div>
+        <div style={{ color: '#ffaa44', fontSize: '14px', fontFamily: "'Syne', sans-serif", fontWeight: 700, marginBottom: '4px' }}>
+          🔒 Free weekly refresh used
+        </div>
+        <div style={{ color: '#8a6a40', fontSize: '12px', fontFamily: "'JetBrains Mono', monospace" }}>
+          Sign up free to load fresh threats, or upgrade to Pro for refreshes every 4 hours.
+        </div>
+      </div>
+      <SignUpButton mode="modal">
+        <button style={{
+          background: '#ff7b00', border: 'none', color: '#fff',
+          borderRadius: '6px', padding: '10px 22px', fontSize: '12px',
+          fontFamily: "'JetBrains Mono', monospace", cursor: 'pointer', fontWeight: 700,
+        }}>Sign Up Free</button>
+      </SignUpButton>
     </div>
   )
 }
@@ -181,17 +232,18 @@ function Footer() {
 }
 
 export default function Home() {
-  const { isSignedIn, isLoaded } = useUser()
+  const { isSignedIn } = useUser()
   const [isPro, setIsPro] = useState(false)
-  const [articles, setArticles] = useState([])
+  const [articles, setArticles] = useState(SAMPLE_ARTICLES)
+  const [isShowingSamples, setIsShowingSamples] = useState(true)
   const [loading, setLoading] = useState(false)
   const [activeCategory, setActive] = useState('All')
   const [lastFetched, setLastFetched] = useState(null)
   const [error, setError] = useState(null)
   const [upgrading, setUpgrading] = useState(false)
-  const [hasFetchedOnce, setHasFetchedOnce] = useState(false)
+  const [isLockedOut, setIsLockedOut] = useState(false)
 
-  // Restore cached articles from previous visit
+  // Restore cached real articles from previous successful fetch
   useEffect(() => {
     const cached = localStorage.getItem('cyberbrief_cached_news')
     if (cached) {
@@ -199,14 +251,13 @@ export default function Home() {
         const parsed = JSON.parse(cached)
         if (parsed.articles && parsed.timestamp) {
           setArticles(parsed.articles)
+          setIsShowingSamples(false)
           setLastFetched(new Date(parsed.timestamp))
-          setHasFetchedOnce(true)
         }
       } catch (e) { /* ignore */ }
     }
   }, [])
 
-  // Check Pro status when signed in
   useEffect(() => {
     if (isSignedIn) {
       fetch('/api/user-status')
@@ -235,15 +286,20 @@ export default function Home() {
   async function fetchNews() {
     setLoading(true)
     setError(null)
+    setIsLockedOut(false)
     try {
       const res = await fetch('/api/news', { method: 'POST' })
       const data = await res.json()
-      if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`)
+      if (!res.ok || data.error) {
+        if (data.isLimit) {
+          setIsLockedOut(true)
+        }
+        throw new Error(data.error || `HTTP ${res.status}`)
+      }
       setArticles(data.articles)
+      setIsShowingSamples(false)
       const now = new Date()
       setLastFetched(now)
-      setHasFetchedOnce(true)
-      // Cache for future visits
       localStorage.setItem('cyberbrief_cached_news', JSON.stringify({
         articles: data.articles,
         timestamp: now.toISOString(),
@@ -272,7 +328,9 @@ export default function Home() {
         <div style={{ marginBottom: '24px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
             <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#3a7bd5', boxShadow: '0 0 8px #3a7bd5', animation: 'pulse 2s ease-in-out infinite' }} />
-            <span style={{ color: '#3a7bd5', fontSize: '11px', fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.15em', textTransform: 'uppercase' }}>Live Intelligence Feed</span>
+            <span style={{ color: '#3a7bd5', fontSize: '11px', fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.15em', textTransform: 'uppercase' }}>
+              {isShowingSamples ? 'Sample Preview' : 'Live Intelligence Feed'}
+            </span>
           </div>
           <h1 style={{ color: '#c8d8f0', fontSize: 'clamp(28px,5vw,42px)', fontFamily: "'Syne', sans-serif", fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1.1, marginBottom: '8px' }}>
             CYBER<span style={{ color: '#3a7bd5' }}>BRIEF</span>
@@ -282,16 +340,19 @@ export default function Home() {
           </p>
         </div>
 
-        {/* Hero — shown when no articles have been fetched yet */}
-        {!hasFetchedOnce && !loading && articles.length === 0 && (
-          <HeroSection onFetch={fetchNews} loading={loading} />
+        {/* Show preview banner when displaying samples */}
+        {isShowingSamples && !isLockedOut && (
+          <PreviewBanner onLoad={fetchNews} loading={loading} />
         )}
 
-        {/* Upgrade banner for signed-in free users */}
-        {isSignedIn && !isPro && articles.length > 0 && <UpgradeBanner onUpgrade={handleUpgrade} upgrading={upgrading} />}
+        {/* Show locked banner if rate limited */}
+        {isLockedOut && !isSignedIn && <LockedBanner />}
 
-        {/* Controls — only after we have articles or are loading */}
-        {(articles.length > 0 || loading) && (
+        {/* Upgrade banner for signed-in free users viewing real news */}
+        {isSignedIn && !isPro && !isShowingSamples && <UpgradeBanner onUpgrade={handleUpgrade} upgrading={upgrading} />}
+
+        {/* Category filters + refresh — only on real news */}
+        {!isShowingSamples && (articles.length > 0 || loading) && (
           <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '20px' }}>
             {CATEGORIES.map(cat => (
               <button key={cat} onClick={() => setActive(cat)} style={{
@@ -321,9 +382,9 @@ export default function Home() {
           </div>
         )}
 
-        {error && (
+        {error && !isLockedOut && (
           <div style={{ background: '#1a0a0a', border: '1px solid #3a1515', borderRadius: '8px', padding: '14px 16px', marginBottom: '16px' }}>
-            <div style={{ color: '#ff6060', fontSize: '12px', fontFamily: "'JetBrains Mono', monospace", marginBottom: '4px' }}>⚠ {error.includes('refresh') || error.includes('cooldown') ? 'Hold up' : 'Error'}</div>
+            <div style={{ color: '#ff6060', fontSize: '12px', fontFamily: "'JetBrains Mono', monospace", marginBottom: '4px' }}>⚠ {error.includes('cooldown') ? 'Hold up' : 'Error'}</div>
             <div style={{ color: '#804040', fontSize: '11px', fontFamily: "'JetBrains Mono', monospace", wordBreak: 'break-all' }}>{error}</div>
           </div>
         )}
