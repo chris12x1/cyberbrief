@@ -4,7 +4,6 @@ import { useUser, SignInButton, SignUpButton, UserButton } from '@clerk/nextjs'
 import NewsCard from './components/NewsCard'
 
 const CATEGORIES = ['All', 'Vulnerabilities', 'Data Breaches', 'Malware', 'Nation-State', 'Zero-Day']
-const FREE_REFRESH_INTERVAL_DAYS = 7
 
 function LoadingCard({ index }) {
   return (
@@ -82,6 +81,56 @@ function AuthBar({ isSignedIn, isPro, onUpgrade, upgrading }) {
   )
 }
 
+function HeroSection({ onSignUp, onFetch, loading }) {
+  return (
+    <div style={{
+      textAlign: 'center', padding: '60px 20px',
+      border: '1px solid #111c30', borderRadius: '12px',
+      background: 'linear-gradient(135deg, #0a1120, #0f1a2e)',
+      marginBottom: '20px',
+    }}>
+      <div style={{ fontSize: '40px', marginBottom: '12px' }}>🔐</div>
+      <h2 style={{
+        color: '#c8d8f0', fontSize: 'clamp(20px,3vw,28px)',
+        fontFamily: "'Syne', sans-serif", fontWeight: 800,
+        marginBottom: '10px', letterSpacing: '-0.01em',
+      }}>
+        AI-curated cybersecurity intelligence
+      </h2>
+      <p style={{
+        color: '#5a7a9a', fontSize: '13px',
+        fontFamily: "'DM Sans', sans-serif",
+        marginBottom: '24px', maxWidth: '480px', margin: '0 auto 24px',
+        lineHeight: 1.6,
+      }}>
+        The 8 most important cybersecurity stories from the last 48 hours — summarized, severity-rated, and verified against primary sources.
+      </p>
+      <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
+        <button onClick={onFetch} disabled={loading} style={{
+          background: loading ? '#1a2e50' : '#3a7bd5', border: 'none', color: '#fff',
+          borderRadius: '6px', padding: '12px 24px', fontSize: '13px',
+          fontFamily: "'JetBrains Mono', monospace", cursor: loading ? 'wait' : 'pointer', fontWeight: 700,
+        }}>
+          {loading ? '⏳ Fetching...' : '⚡ Load Latest Threats'}
+        </button>
+        <SignUpButton mode="modal">
+          <button style={{
+            background: 'transparent', border: '1px solid #1e3a5f',
+            color: '#3a7bd5', borderRadius: '6px', padding: '12px 24px',
+            fontSize: '13px', fontFamily: "'JetBrains Mono', monospace", cursor: 'pointer',
+          }}>Sign Up Free</button>
+        </SignUpButton>
+      </div>
+      <p style={{
+        color: '#2a4060', fontSize: '10px', marginTop: '20px',
+        fontFamily: "'JetBrains Mono', monospace",
+      }}>
+        Free: 1 refresh/week · Pro $7/mo: 1 refresh every 4 hours
+      </p>
+    </div>
+  )
+}
+
 function UpgradeBanner({ onUpgrade, upgrading }) {
   return (
     <div style={{
@@ -91,7 +140,7 @@ function UpgradeBanner({ onUpgrade, upgrading }) {
     }}>
       <div>
         <div style={{ color: '#7ab3f0', fontSize: '13px', fontFamily: "'Syne', sans-serif", fontWeight: 700, marginBottom: '4px' }}>⚡ Upgrade to Pro</div>
-        <div style={{ color: '#3a5a80', fontSize: '11px', fontFamily: "'JetBrains Mono', monospace" }}>Unlimited refreshes · Email digest · Custom categories</div>
+        <div style={{ color: '#3a5a80', fontSize: '11px', fontFamily: "'JetBrains Mono', monospace" }}>1 refresh every 4 hours · Weekly email digest (coming soon) · Custom categories (coming soon)</div>
       </div>
       <button onClick={onUpgrade} disabled={upgrading} style={{
         background: upgrading ? '#1a2e50' : '#3a7bd5', border: 'none', color: '#fff',
@@ -104,19 +153,60 @@ function UpgradeBanner({ onUpgrade, upgrading }) {
   )
 }
 
+function Footer() {
+  return (
+    <div style={{
+      marginTop: '60px', paddingTop: '30px',
+      borderTop: '1px solid #111c30',
+      textAlign: 'center',
+    }}>
+      <div style={{
+        color: '#2a4060', fontSize: '11px',
+        fontFamily: "'JetBrains Mono', monospace",
+        marginBottom: '12px', lineHeight: 1.7,
+      }}>
+        ⚠ CyberBrief uses AI to summarize cybersecurity news.<br />
+        Always verify critical information against primary sources before taking action.<br />
+        Not affiliated with any vendor or news organization.
+      </div>
+      <div style={{
+        color: '#1a2a3a', fontSize: '10px',
+        fontFamily: "'JetBrains Mono', monospace",
+        letterSpacing: '0.05em',
+      }}>
+        © {new Date().getFullYear()} CYBERBRIEF · POWERED BY GEMINI AI
+      </div>
+    </div>
+  )
+}
+
 export default function Home() {
-  const { isSignedIn } = useUser()
+  const { isSignedIn, isLoaded } = useUser()
   const [isPro, setIsPro] = useState(false)
   const [articles, setArticles] = useState([])
   const [loading, setLoading] = useState(false)
   const [activeCategory, setActive] = useState('All')
   const [lastFetched, setLastFetched] = useState(null)
   const [error, setError] = useState(null)
-  const [cooldown, setCooldown] = useState(0)
-  const [hasUsedFreeRefresh, setHasUsedFreeRefresh] = useState(false)
   const [upgrading, setUpgrading] = useState(false)
+  const [hasFetchedOnce, setHasFetchedOnce] = useState(false)
 
-  // Check pro status from DB
+  // Restore cached articles from previous visit
+  useEffect(() => {
+    const cached = localStorage.getItem('cyberbrief_cached_news')
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached)
+        if (parsed.articles && parsed.timestamp) {
+          setArticles(parsed.articles)
+          setLastFetched(new Date(parsed.timestamp))
+          setHasFetchedOnce(true)
+        }
+      } catch (e) { /* ignore */ }
+    }
+  }, [])
+
+  // Check Pro status when signed in
   useEffect(() => {
     if (isSignedIn) {
       fetch('/api/user-status')
@@ -127,18 +217,6 @@ export default function Home() {
       setIsPro(false)
     }
   }, [isSignedIn])
-
-  useEffect(() => {
-    if (!isSignedIn) {
-      const lastRefresh = localStorage.getItem('cyberbrief_last_refresh')
-      if (lastRefresh) {
-        const daysSince = (Date.now() - parseInt(lastRefresh)) / (1000 * 60 * 60 * 24)
-        if (daysSince < FREE_REFRESH_INTERVAL_DAYS) setHasUsedFreeRefresh(true)
-      }
-    }
-  }, [isSignedIn])
-
-  const canRefresh = isPro || !hasUsedFreeRefresh || (isSignedIn && !isPro)
 
   async function handleUpgrade() {
     if (!isSignedIn) return
@@ -157,31 +235,25 @@ export default function Home() {
   async function fetchNews() {
     setLoading(true)
     setError(null)
-    setArticles([])
-    if (!isSignedIn && !isPro) {
-      localStorage.setItem('cyberbrief_last_refresh', Date.now().toString())
-      setHasUsedFreeRefresh(true)
-    }
     try {
       const res = await fetch('/api/news', { method: 'POST' })
       const data = await res.json()
       if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`)
       setArticles(data.articles)
-      setLastFetched(new Date())
-      if (!isPro) {
-        setCooldown(30)
-        const timer = setInterval(() => {
-          setCooldown(prev => { if (prev <= 1) { clearInterval(timer); return 0 } return prev - 1 })
-        }, 1000)
-      }
+      const now = new Date()
+      setLastFetched(now)
+      setHasFetchedOnce(true)
+      // Cache for future visits
+      localStorage.setItem('cyberbrief_cached_news', JSON.stringify({
+        articles: data.articles,
+        timestamp: now.toISOString(),
+      }))
     } catch (err) {
       setError(err.message)
     } finally {
       setLoading(false)
     }
   }
-
-  useEffect(() => { fetchNews() }, [isSignedIn, isPro])
 
   const filtered = activeCategory === 'All' ? articles : articles.filter(a => a.category === activeCategory)
   const counts = CATEGORIES.reduce((acc, cat) => {
@@ -197,7 +269,7 @@ export default function Home() {
       <AuthBar isSignedIn={isSignedIn} isPro={isPro} onUpgrade={handleUpgrade} upgrading={upgrading} />
 
       <div style={{ position: 'relative', zIndex: 1, maxWidth: '860px', margin: '0 auto', padding: '80px 20px 40px' }}>
-        <div style={{ marginBottom: '36px' }}>
+        <div style={{ marginBottom: '24px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
             <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#3a7bd5', boxShadow: '0 0 8px #3a7bd5', animation: 'pulse 2s ease-in-out infinite' }} />
             <span style={{ color: '#3a7bd5', fontSize: '11px', fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.15em', textTransform: 'uppercase' }}>Live Intelligence Feed</span>
@@ -206,30 +278,19 @@ export default function Home() {
             CYBER<span style={{ color: '#3a7bd5' }}>BRIEF</span>
           </h1>
           <p style={{ color: '#2a4060', fontSize: '13px', fontFamily: "'JetBrains Mono', monospace" }}>
-            AI-curated threat intelligence · Updated {lastFetched ? lastFetched.toLocaleTimeString() : '—'}
-            {' '}· <span style={{ color: '#1a3050' }}>AI-summarized — verify with primary sources</span>
+            AI-curated threat intelligence{lastFetched ? ` · Updated ${lastFetched.toLocaleTimeString()}` : ''}
           </p>
         </div>
 
-        {isSignedIn && !isPro && <UpgradeBanner onUpgrade={handleUpgrade} upgrading={upgrading} />}
-
-        {!isSignedIn && hasUsedFreeRefresh && articles.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '60px 20px', border: '1px dashed #1e3a5f', borderRadius: '12px' }}>
-            <div style={{ fontSize: '32px', marginBottom: '12px' }}>🔒</div>
-            <div style={{ color: '#c8d8f0', fontSize: '16px', fontFamily: "'Syne', sans-serif", fontWeight: 700, marginBottom: '8px' }}>Weekly refresh used</div>
-            <div style={{ color: '#2a4060', fontSize: '12px', fontFamily: "'JetBrains Mono', monospace", marginBottom: '20px' }}>
-              Sign up free to get more refreshes, or go Pro for unlimited access.
-            </div>
-            <SignUpButton mode="modal">
-              <button style={{
-                background: '#3a7bd5', border: 'none', color: '#fff',
-                borderRadius: '6px', padding: '10px 24px', fontSize: '13px',
-                fontFamily: "'JetBrains Mono', monospace", cursor: 'pointer', fontWeight: 700,
-              }}>Create Free Account</button>
-            </SignUpButton>
-          </div>
+        {/* Hero — shown when no articles have been fetched yet */}
+        {!hasFetchedOnce && !loading && articles.length === 0 && (
+          <HeroSection onFetch={fetchNews} loading={loading} />
         )}
 
+        {/* Upgrade banner for signed-in free users */}
+        {isSignedIn && !isPro && articles.length > 0 && <UpgradeBanner onUpgrade={handleUpgrade} upgrading={upgrading} />}
+
+        {/* Controls — only after we have articles or are loading */}
         {(articles.length > 0 || loading) && (
           <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '20px' }}>
             {CATEGORIES.map(cat => (
@@ -247,22 +308,22 @@ export default function Home() {
                 )}
               </button>
             ))}
-            <button onClick={fetchNews} disabled={loading || (!isPro && cooldown > 0)} style={{
-              marginLeft: 'auto', background: (loading || (!isPro && cooldown > 0)) ? '#0a1120' : '#0f1e35',
-              border: '1px solid #1e3a5f', color: (loading || (!isPro && cooldown > 0)) ? '#1a3050' : '#3a7bd5',
+            <button onClick={fetchNews} disabled={loading} style={{
+              marginLeft: 'auto', background: loading ? '#0a1120' : '#0f1e35',
+              border: '1px solid #1e3a5f', color: loading ? '#1a3050' : '#3a7bd5',
               borderRadius: '6px', padding: '5px 14px', fontSize: '11px',
-              fontFamily: "'JetBrains Mono', monospace", cursor: (loading || (!isPro && cooldown > 0)) ? 'not-allowed' : 'pointer',
+              fontFamily: "'JetBrains Mono', monospace", cursor: loading ? 'not-allowed' : 'pointer',
               display: 'flex', alignItems: 'center', gap: '6px',
             }}>
               <span style={{ display: 'inline-block', animation: loading ? 'spin 1s linear infinite' : 'none' }}>↻</span>
-              {loading ? 'Fetching...' : (!isPro && cooldown > 0) ? `Wait ${cooldown}s` : 'Refresh'}
+              {loading ? 'Fetching...' : 'Refresh'}
             </button>
           </div>
         )}
 
         {error && (
           <div style={{ background: '#1a0a0a', border: '1px solid #3a1515', borderRadius: '8px', padding: '14px 16px', marginBottom: '16px' }}>
-            <div style={{ color: '#ff6060', fontSize: '12px', fontFamily: "'JetBrains Mono', monospace", marginBottom: '4px' }}>⚠ Error</div>
+            <div style={{ color: '#ff6060', fontSize: '12px', fontFamily: "'JetBrains Mono', monospace", marginBottom: '4px' }}>⚠ {error.includes('refresh') || error.includes('cooldown') ? 'Hold up' : 'Error'}</div>
             <div style={{ color: '#804040', fontSize: '11px', fontFamily: "'JetBrains Mono', monospace", wordBreak: 'break-all' }}>{error}</div>
           </div>
         )}
@@ -274,11 +335,7 @@ export default function Home() {
           }
         </div>
 
-        {!loading && articles.length > 0 && (
-          <div style={{ marginTop: '32px', textAlign: 'center', color: '#1a2a3a', fontSize: '11px', fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.05em' }}>
-            CYBERBRIEF · POWERED BY GEMINI AI · {articles.length} ARTICLES LOADED
-          </div>
-        )}
+        <Footer />
       </div>
     </div>
   )

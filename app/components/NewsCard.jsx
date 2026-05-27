@@ -21,6 +21,13 @@ function SeverityBadge({ level }) {
   )
 }
 
+// Generate a Google search URL to the article so users can find/verify the source
+function getSourceUrl(article) {
+  if (article.url) return article.url
+  const query = encodeURIComponent(`"${article.title}" ${article.source || ''}`)
+  return `https://www.google.com/search?q=${query}`
+}
+
 export default function NewsCard({ article, index }) {
   const [expanded, setExpanded] = useState(false)
   const borderColor = SEVERITY_COLORS[article.severity] || '#1e3a5f'
@@ -66,10 +73,23 @@ export default function NewsCard({ article, index }) {
             <p style={{ color: '#5a7a9a', fontSize: '12px', lineHeight: 1.8, margin: 0 }}>{article.summary}</p>
           </div>
           {article.source && (
-            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-              <span style={{ color: '#2a4060', fontSize: '11px', fontFamily: "'JetBrains Mono', monospace" }}>Source:</span>
-              <span style={{ color: '#3a5a80', fontSize: '11px', fontFamily: "'JetBrains Mono', monospace" }}>{article.source}</span>
-            </div>
+            <a
+              href={getSourceUrl(article)}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '6px',
+                color: '#3a7bd5', fontSize: '11px', fontFamily: "'JetBrains Mono', monospace",
+                textDecoration: 'none', padding: '6px 10px',
+                border: '1px solid #1e3a5f', borderRadius: '4px',
+                background: '#0a1120', transition: 'all 0.15s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = '#0f1e35'; e.currentTarget.style.borderColor = '#3a7bd5' }}
+              onMouseLeave={e => { e.currentTarget.style.background = '#0a1120'; e.currentTarget.style.borderColor = '#1e3a5f' }}
+            >
+              🔗 Verify on {article.source} →
+            </a>
           )}
         </div>
       )}
