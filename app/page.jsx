@@ -241,6 +241,7 @@ export default function Home() {
   const [lastFetched, setLastFetched] = useState(null)
   const [error, setError] = useState(null)
   const [upgrading, setUpgrading] = useState(false)
+  const [cooldownMinutes, setCooldownMinutes] = useState(0)
   const [isLockedOut, setIsLockedOut] = useState(false)
 
   // Restore cached real articles from previous successful fetch
@@ -258,6 +259,19 @@ export default function Home() {
     }
   }, [])
 
+  // Poll refresh status to update cooldown timer
+  async function checkRefreshStatus() {
+    if (!isSignedIn) {
+      setCooldownMinutes(0)
+      return
+    }
+    try {
+      const res = await fetch('/api/refresh-status')
+      const data = await res.json()
+      setCooldownMinutes(data.cooldownMinutes || 0)
+    } catch (e) { /* ignore */ }
+  }
+
   useEffect(() => {
     if (isSignedIn) {
       fetch('/api/user-status')
@@ -265,16 +279,27 @@ export default function Home() {
         .then(data => {
           const proStatus = data.isPro || false
           setIsPro(proStatus)
-          // Auto-fetch live news for signed-in users (no cached real news yet)
           if (isShowingSamples) {
             fetchNews()
           }
         })
         .catch(() => setIsPro(false))
+
+      checkRefreshStatus()
     } else {
       setIsPro(false)
+      setCooldownMinutes(0)
     }
   }, [isSignedIn])
+
+  // Tick down the cooldown every minute
+  useEffect(() => {
+    if (cooldownMinutes <= 0) return
+    const interval = setInterval(() => {
+      setCooldownMinutes(prev => Math.max(0, prev - 1))
+    }, 60000)
+    return () => clearInterval(interval)
+  }, [cooldownMinutes])
 
   async function handleUpgrade() {
     if (!isSignedIn) return
@@ -311,6 +336,8 @@ export default function Home() {
         articles: data.articles,
         timestamp: now.toISOString(),
       }))
+      // Refresh cooldown status after successful fetch
+      checkRefreshStatus()
     } catch (err) {
       setError(err.message)
     } finally {
@@ -376,15 +403,21 @@ export default function Home() {
                 )}
               </button>
             ))}
-            <button onClick={fetchNews} disabled={loading} style={{
-              marginLeft: 'auto', background: loading ? '#0a1120' : '#0f1e35',
-              border: '1px solid #1e3a5f', color: loading ? '#1a3050' : '#3a7bd5',
+            <button onClick={fetchNews} disabled={loading || cooldownMinutes > 0} style={{
+              marginLeft: 'auto', background: (loading || cooldownMinutes > 0) ? '#0a1120' : '#0f1e35',
+              border: '1px solid #1e3a5f', color: (loading || cooldownMinutes > 0) ? '#1a3050' : '#3a7bd5',
               borderRadius: '6px', padding: '5px 14px', fontSize: '11px',
-              fontFamily: "'JetBrains Mono', monospace", cursor: loading ? 'not-allowed' : 'pointer',
+              fontFamily: "'JetBrains Mono', monospace", cursor: (loading || cooldownMinutes > 0) ? 'not-allowed' : 'pointer',
               display: 'flex', alignItems: 'center', gap: '6px',
             }}>
               <span style={{ display: 'inline-block', animation: loading ? 'spin 1s linear infinite' : 'none' }}>↻</span>
-              {loading ? 'Fetching...' : 'Refresh'}
+              {loading
+                ? 'Fetching...'
+                : cooldownMinutes > 0
+                  ? cooldownMinutes >= 60
+                    ? `Wait ${Math.floor(cooldownMinutes/60)}h ${cooldownMinutes%60}m`
+                    : `Wait ${cooldownMinutes}m`
+                  : 'Refresh'}
             </button>
           </div>
         )}
