@@ -105,9 +105,18 @@ export async function POST(req) {
   })
 
   try {
-    const prompt = `You are a cybersecurity analyst. Today is ${today}.
+    const yesterday = new Date(Date.now() - 24*60*60*1000).toLocaleDateString('en-US', {
+      month: 'long', day: 'numeric', year: 'numeric',
+    })
+    const twoDaysAgo = new Date(Date.now() - 48*60*60*1000).toLocaleDateString('en-US', {
+      month: 'long', day: 'numeric', year: 'numeric',
+    })
 
-Use Google Search to find the 8 most important cybersecurity news stories from the last 48 hours.
+    const prompt = `You are a cybersecurity analyst. Today is ${today}. Yesterday was ${yesterday}.
+
+Use Google Search to find the 8 most important cybersecurity news stories published BETWEEN ${twoDaysAgo} AND ${today}.
+
+CRITICAL: Only include stories published in the last 48 hours. Reject any stories older than ${twoDaysAgo}. If the source article is from before ${twoDaysAgo}, do not include it.
 
 Return ONLY a valid JSON array — no markdown, no backticks, no explanation before or after.
 

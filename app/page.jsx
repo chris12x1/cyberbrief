@@ -167,10 +167,10 @@ function LockedBanner() {
     }}>
       <div>
         <div style={{ color: '#ffaa44', fontSize: '14px', fontFamily: "'Syne', sans-serif", fontWeight: 700, marginBottom: '4px' }}>
-          🔒 Free weekly refresh used
+          🔒 Anonymous refresh limit reached
         </div>
         <div style={{ color: '#8a6a40', fontSize: '12px', fontFamily: "'JetBrains Mono', monospace" }}>
-          Sign up free to load fresh threats, or upgrade to Pro for refreshes every 4 hours.
+          This network already used its free weekly refresh. Sign up free for your own quota.
         </div>
       </div>
       <SignUpButton mode="modal">
@@ -265,16 +265,21 @@ export default function Home() {
   const [cooldownMinutes, setCooldownMinutes] = useState(0)
   const [isLockedOut, setIsLockedOut] = useState(false)
 
-  // Restore cached real articles from previous successful fetch
+  // Restore cached real articles from previous successful fetch (max 3 hours old)
   useEffect(() => {
     const cached = localStorage.getItem('cyberbrief_cached_news')
     if (cached) {
       try {
         const parsed = JSON.parse(cached)
         if (parsed.articles && parsed.timestamp) {
-          setArticles(parsed.articles)
-          setIsShowingSamples(false)
-          setLastFetched(new Date(parsed.timestamp))
+          const ageHours = (Date.now() - new Date(parsed.timestamp).getTime()) / (1000 * 60 * 60)
+          if (ageHours < 3) {
+            setArticles(parsed.articles)
+            setIsShowingSamples(false)
+            setLastFetched(new Date(parsed.timestamp))
+          } else {
+            localStorage.removeItem('cyberbrief_cached_news')
+          }
         }
       } catch (e) { /* ignore */ }
     }
