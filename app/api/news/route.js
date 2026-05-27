@@ -74,7 +74,6 @@ export async function POST(req) {
         }, { status: 429 })
       }
     } else {
-      // Pro user — check 4-hour cooldown
       const limit = await checkProLimit(userId)
       if (!limit.allowed) {
         const timeStr = formatTimeRemaining(limit.minutesUntilNextRefresh)
@@ -84,6 +83,21 @@ export async function POST(req) {
         }, { status: 429 })
       }
     }
+  }
+
+  // CRITICAL: Record the refresh BEFORE making the expensive Gemini call.
+  // This prevents abuse from people clicking refresh rapidly while the API is processing.
+  try {
+    if (!userId) {
+      await recordAnonymousRefresh(ip)
+    } else if (!userIsPro) {
+      await recordSignedInRefresh(userId)
+    } else {
+      await recordProRefresh(userId)
+    }
+  } catch (dbErr) {
+    console.error('Failed to record refresh:', dbErr)
+    return NextResponse.json({ error: 'Database error tracking refresh' }, { status: 500 })
   }
 
   const today = new Date().toLocaleDateString('en-US', {
@@ -103,8 +117,11 @@ Each object must have exactly these fields:
 - summary: string (3-5 sentences)
 - severity: one of "critical" | "high" | "medium" | "low" | "info"
 - category: one of "Vulnerabilities" | "Data Breaches" | "Malware" | "Nation-State" | "Zero-Day"
-- source: string (e.g. "The Hacker News")
+- source: string (e.g. "The Hacker News", "BleepingComputer", "SecurityWeek")
+- url: string (the FULL DIRECT URL to the original article — e.g. "https://thehackernews.com/2026/01/example.html". Only include if you have a real URL from your search results. Otherwise OMIT this field entirely.)
 - date: string (e.g. "Apr 27")
+
+CRITICAL: For the "url" field, only include it if you found a real, working URL during your search. Never make up URLs. If unsure, omit the field.
 
 Your entire response must be a raw JSON array starting with [ and ending with ]. Nothing else.`
 
@@ -120,15 +137,6 @@ Your entire response must be a raw JSON array starting with [ and ending with ].
     }
 
     const articles = JSON.parse(match[0])
-
-    // Record the refresh AFTER successful fetch
-    if (!userId) {
-      await recordAnonymousRefresh(ip)
-    } else if (!userIsPro) {
-      await recordSignedInRefresh(userId)
-    } else {
-      await recordProRefresh(userId)
-    }
 
     return NextResponse.json({ articles })
   } catch (err) {
