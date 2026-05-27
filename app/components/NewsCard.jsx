@@ -21,10 +21,21 @@ function SeverityBadge({ level }) {
   )
 }
 
-// Generate a Google search URL to the article so users can find/verify the source
+// Generate a Google search URL — extract key terms from title for better match
 function getSourceUrl(article) {
   if (article.url) return article.url
-  const query = encodeURIComponent(`"${article.title}" ${article.source || ''}`)
+
+  // Pull out key terms — CVE IDs, company names, specific products
+  // Use first 6 significant words from title (without quotes) for fuzzy match
+  const title = article.title || ''
+  const words = title
+    .replace(/[^\w\s\-\.]/g, ' ')   // strip punctuation
+    .split(/\s+/)
+    .filter(w => w.length > 2)
+    .slice(0, 6)
+    .join(' ')
+
+  const query = encodeURIComponent(`${words} ${article.source || ''} cybersecurity`)
   return `https://www.google.com/search?q=${query}`
 }
 
@@ -85,10 +96,8 @@ export default function NewsCard({ article, index }) {
                 border: '1px solid #1e3a5f', borderRadius: '4px',
                 background: '#0a1120', transition: 'all 0.15s',
               }}
-              onMouseEnter={e => { e.currentTarget.style.background = '#0f1e35'; e.currentTarget.style.borderColor = '#3a7bd5' }}
-              onMouseLeave={e => { e.currentTarget.style.background = '#0a1120'; e.currentTarget.style.borderColor = '#1e3a5f' }}
             >
-              🔗 Verify on {article.source} →
+              🔗 Search "{article.source}" →
             </a>
           )}
         </div>
