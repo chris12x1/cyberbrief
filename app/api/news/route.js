@@ -2,7 +2,7 @@ import { GoogleGenAI } from '@google/genai'
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import {
-  getUser,
+  getUser, getCachedNews, setCachedNews,
   checkAnonymousLimit, recordAnonymousRefresh, rollbackAnonymousRefresh,
   checkSignedInFreeLimit, recordSignedInRefresh, rollbackSignedInRefresh,
   checkProLimit, recordProRefresh, rollbackProRefresh,
@@ -44,13 +44,29 @@ function formatTimeRemaining(minutes) {
   return `${hours}h ${mins}m`
 }
 
+// GET = return the shared cached news (for signed-in users to view instantly).
+// No Gemini call, no rate limit. Anonymous users get nothing (samples shown client-side).
+export async function GET() {
+  const { userId } = await auth()
+  if (!userId) return NextResponse.json({ articles: null })
+  try {
+    const cache = await getCachedNews()
+    if (!cache || !cache.articles) return NextResponse.json({ articles: null })
+    return NextResponse.json({ articles: cache.articles, fetchedAt: cache.fetched_at })
+  } catch (e) {
+    console.error('getCachedNews error:', e)
+    return NextResponse.json({ articles: null })
+  }
+}
+
+// POST = trigger a fresh fetch (rate-limited per user), update the shared cache.
 export async function POST(req) {
   const { userId } = await auth()
   const ip = getClientIp(req)
 
   let userIsPro = false
 
-  // ---- Limit checks (before doing anything expensive) ----
+  // ---- Limit checks ----
   if (!userId) {
     const limit = await checkAnonymousLimit(ip)
     if (!limit.allowed) {
@@ -82,31 +98,24 @@ export async function POST(req) {
     }
   }
 
-  // ---- Record the refresh BEFORE the Gemini call (prevents rapid-click abuse) ----
+  // ---- Record BEFORE the Gemini call (prevents rapid-click abuse) ----
   let rollbackInfo = null
   let rollbackType = null
   try {
-    if (!userId) {
-      rollbackInfo = await recordAnonymousRefresh(ip); rollbackType = 'anonymous'
-    } else if (!userIsPro) {
-      rollbackInfo = await recordSignedInRefresh(userId); rollbackType = 'free'
-    } else {
-      rollbackInfo = await recordProRefresh(userId); rollbackType = 'pro'
-    }
+    if (!userId) { rollbackInfo = await recordAnonymousRefresh(ip); rollbackType = 'anonymous' }
+    else if (!userIsPro) { rollbackInfo = await recordSignedInRefresh(userId); rollbackType = 'free' }
+    else { rollbackInfo = await recordProRefresh(userId); rollbackType = 'pro' }
   } catch (dbErr) {
     console.error('Failed to record refresh:', dbErr)
     return NextResponse.json({ error: 'Database error tracking refresh' }, { status: 500 })
   }
 
-  // Undo the recorded refresh if the fetch fails, so the user isn't penalized
   const rollback = async () => {
     try {
       if (rollbackType === 'anonymous') await rollbackAnonymousRefresh(ip, rollbackInfo)
       else if (rollbackType === 'free') await rollbackSignedInRefresh(userId, rollbackInfo)
       else if (rollbackType === 'pro') await rollbackProRefresh(userId, rollbackInfo)
-    } catch (e) {
-      console.error('Rollback failed:', e)
-    }
+    } catch (e) { console.error('Rollback failed:', e) }
   }
 
   const today = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
@@ -141,10 +150,14 @@ Your entire response must be a raw JSON array starting with [ and ending with ].
     const match = text.match(/\[[\s\S]*\]/)
     if (!match) {
       await rollback()
-      return NextResponse.json({ error: 'Could not load news right now — please try again.' }, { status: 500 })
+      return NextResponse.json({ error: 'Could not load news right now — please try again. Your refresh was not used.' }, { status: 500 })
     }
 
     const articles = JSON.parse(match[0])
+
+    // Save to the shared cache so every user sees this instantly
+    try { await setCachedNews(articles) } catch (e) { console.error('setCachedNews failed:', e) }
+
     return NextResponse.json({ articles })
   } catch (err) {
     await rollback()

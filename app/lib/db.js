@@ -39,6 +39,14 @@ export async function setupDatabase() {
       refresh_count INT DEFAULT 1
     )
   `
+  // Single shared snapshot of the latest news (same for all users)
+  await sql`
+    CREATE TABLE IF NOT EXISTS news_cache (
+      id INT PRIMARY KEY,
+      articles JSONB,
+      fetched_at TIMESTAMP DEFAULT NOW()
+    )
+  `
 }
 
 export async function getUser(clerkUserId) {
@@ -80,6 +88,21 @@ export async function setUserNotPro(stripeSubscriptionId) {
   return rows[0]
 }
 
+/* ---------- SHARED NEWS CACHE ---------- */
+export async function getCachedNews() {
+  const rows = await sql`SELECT articles, fetched_at FROM news_cache WHERE id = 1`
+  return rows[0] || null
+}
+
+export async function setCachedNews(articles) {
+  await sql`
+    INSERT INTO news_cache (id, articles, fetched_at)
+    VALUES (1, ${JSON.stringify(articles)}::jsonb, NOW())
+    ON CONFLICT (id) DO UPDATE
+    SET articles = ${JSON.stringify(articles)}::jsonb, fetched_at = NOW()
+  `
+}
+
 /* ---------- ANONYMOUS (IP-based) ---------- */
 export async function checkAnonymousLimit(ipAddress) {
   const FREE_HOURS = 168
@@ -91,7 +114,6 @@ export async function checkAnonymousLimit(ipAddress) {
   return { allowed: false, hoursUntilNextRefresh: Math.ceil(FREE_HOURS - hoursSince) }
 }
 
-// Returns rollback info so a failed fetch can be undone
 export async function recordAnonymousRefresh(ipAddress) {
   const existing = await sql`SELECT last_refresh_at FROM anonymous_refreshes WHERE ip_address = ${ipAddress}`
   const wasNew = existing.length === 0

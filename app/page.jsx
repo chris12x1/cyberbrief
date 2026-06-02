@@ -38,8 +38,6 @@ const SAMPLE_ARTICLES = [
   },
 ]
 
-const CACHE_HOURS = 12
-
 function formatCooldown(minutes) {
   if (minutes <= 0) return 'a moment'
   if (minutes < 60) return `${minutes}m`
@@ -47,18 +45,6 @@ function formatCooldown(minutes) {
   if (hours < 48) { const m = minutes % 60; return m ? `${hours}h ${m}m` : `${hours}h` }
   const days = Math.floor(hours / 24); const h = hours % 24
   return h ? `${days}d ${h}h` : `${days}d`
-}
-
-function readCache() {
-  try {
-    const cached = localStorage.getItem('cyberbrief_cached_news')
-    if (!cached) return null
-    const parsed = JSON.parse(cached)
-    if (!parsed.articles || !parsed.timestamp) return null
-    const ageHours = (Date.now() - new Date(parsed.timestamp).getTime()) / 36e5
-    if (ageHours >= CACHE_HOURS) { localStorage.removeItem('cyberbrief_cached_news'); return null }
-    return parsed
-  } catch { return null }
 }
 
 function LoadingCard({ index }) {
@@ -257,11 +243,7 @@ export default function Home() {
       if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`)
       setArticles(data.articles)
       setIsShowingSamples(false)
-      const now = new Date()
-      setLastFetched(now)
-      localStorage.setItem('cyberbrief_cached_news', JSON.stringify({
-        articles: data.articles, timestamp: now.toISOString(),
-      }))
+      setLastFetched(new Date())
       checkRefreshStatus()
     } catch (err) {
       setError(err.message)
@@ -287,16 +269,24 @@ export default function Home() {
         } catch { /* ignore */ }
         if (cancelled) return
 
-        const cache = readCache()
-        if (cache) {
-          setArticles(cache.articles)
-          setIsShowingSamples(false)
-          setLastFetched(new Date(cache.timestamp))
-        } else if (status.allowed) {
-          fetchNews()
-        } else {
-          // No cache + in cooldown → show the cooldown panel (never samples)
-          setIsShowingSamples(true)
+        // Pull the shared cached news from the server (works across any device)
+        let served = false
+        try {
+          const res = await fetch('/api/news')
+          const data = await res.json()
+          if (!cancelled && Array.isArray(data.articles) && data.articles.length) {
+            setArticles(data.articles)
+            setIsShowingSamples(false)
+            if (data.fetchedAt) setLastFetched(new Date(data.fetchedAt))
+            served = true
+          }
+        } catch { /* ignore */ }
+        if (cancelled) return
+
+        if (!served) {
+          // No shared news cached yet. Fetch fresh if allowed, else show cooldown panel.
+          if (status.allowed) fetchNews()
+          else setIsShowingSamples(true)
         }
       } else {
         // Logged out → always samples
