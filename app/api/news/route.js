@@ -3,12 +3,9 @@ import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import {
   getUser,
-  checkAnonymousLimit,
-  recordAnonymousRefresh,
-  checkSignedInFreeLimit,
-  recordSignedInRefresh,
-  checkProLimit,
-  recordProRefresh,
+  checkAnonymousLimit, recordAnonymousRefresh, rollbackAnonymousRefresh,
+  checkSignedInFreeLimit, recordSignedInRefresh, rollbackSignedInRefresh,
+  checkProLimit, recordProRefresh, rollbackProRefresh,
 } from '../../lib/db'
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })
@@ -53,23 +50,23 @@ export async function POST(req) {
 
   let userIsPro = false
 
+  // ---- Limit checks (before doing anything expensive) ----
   if (!userId) {
     const limit = await checkAnonymousLimit(ip)
     if (!limit.allowed) {
       return NextResponse.json({
-        error: `Free weekly refresh used. Sign up free for more, or upgrade to Pro for unlimited access. Try again in ${limit.hoursUntilNextRefresh} hours.`,
+        error: `This network already used its free weekly refresh. Sign up free for your own quota. Try again in ${limit.hoursUntilNextRefresh} hours.`,
         isLimit: true,
       }, { status: 429 })
     }
   } else {
     const user = await getUser(userId)
     userIsPro = user?.is_pro || false
-
     if (!userIsPro) {
       const limit = await checkSignedInFreeLimit(userId)
       if (!limit.allowed) {
         return NextResponse.json({
-          error: `Free weekly refresh used. Upgrade to Pro for unlimited access. Try again in ${limit.hoursUntilNextRefresh} hours.`,
+          error: `Free weekly refresh used. Upgrade to Pro for refreshes every 4 hours. Try again in ${limit.hoursUntilNextRefresh} hours.`,
           isLimit: true,
         }, { status: 429 })
       }
@@ -85,32 +82,38 @@ export async function POST(req) {
     }
   }
 
-  // CRITICAL: Record the refresh BEFORE making the expensive Gemini call.
-  // This prevents abuse from people clicking refresh rapidly while the API is processing.
+  // ---- Record the refresh BEFORE the Gemini call (prevents rapid-click abuse) ----
+  let rollbackInfo = null
+  let rollbackType = null
   try {
     if (!userId) {
-      await recordAnonymousRefresh(ip)
+      rollbackInfo = await recordAnonymousRefresh(ip); rollbackType = 'anonymous'
     } else if (!userIsPro) {
-      await recordSignedInRefresh(userId)
+      rollbackInfo = await recordSignedInRefresh(userId); rollbackType = 'free'
     } else {
-      await recordProRefresh(userId)
+      rollbackInfo = await recordProRefresh(userId); rollbackType = 'pro'
     }
   } catch (dbErr) {
     console.error('Failed to record refresh:', dbErr)
     return NextResponse.json({ error: 'Database error tracking refresh' }, { status: 500 })
   }
 
-  const today = new Date().toLocaleDateString('en-US', {
-    month: 'long', day: 'numeric', year: 'numeric',
-  })
+  // Undo the recorded refresh if the fetch fails, so the user isn't penalized
+  const rollback = async () => {
+    try {
+      if (rollbackType === 'anonymous') await rollbackAnonymousRefresh(ip, rollbackInfo)
+      else if (rollbackType === 'free') await rollbackSignedInRefresh(userId, rollbackInfo)
+      else if (rollbackType === 'pro') await rollbackProRefresh(userId, rollbackInfo)
+    } catch (e) {
+      console.error('Rollback failed:', e)
+    }
+  }
+
+  const today = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
 
   try {
-    const yesterday = new Date(Date.now() - 24*60*60*1000).toLocaleDateString('en-US', {
-      month: 'long', day: 'numeric', year: 'numeric',
-    })
-    const twoDaysAgo = new Date(Date.now() - 48*60*60*1000).toLocaleDateString('en-US', {
-      month: 'long', day: 'numeric', year: 'numeric',
-    })
+    const yesterday = new Date(Date.now() - 24*60*60*1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+    const twoDaysAgo = new Date(Date.now() - 48*60*60*1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
 
     const prompt = `You are a cybersecurity analyst. Today is ${today}. Yesterday was ${yesterday}.
 
@@ -127,10 +130,8 @@ Each object must have exactly these fields:
 - severity: one of "critical" | "high" | "medium" | "low" | "info"
 - category: one of "Vulnerabilities" | "Data Breaches" | "Malware" | "Nation-State" | "Zero-Day"
 - source: string (e.g. "The Hacker News", "BleepingComputer", "SecurityWeek")
-- url: string (the FULL DIRECT URL to the original article — e.g. "https://thehackernews.com/2026/01/example.html". Only include if you have a real URL from your search results. Otherwise OMIT this field entirely.)
+- url: string (the FULL DIRECT URL to the original article. Only include if you found a real URL from your search results. Otherwise OMIT this field entirely. Never invent URLs.)
 - date: string (e.g. "Apr 27")
-
-CRITICAL: For the "url" field, only include it if you found a real, working URL during your search. Never make up URLs. If unsure, omit the field.
 
 Your entire response must be a raw JSON array starting with [ and ending with ]. Nothing else.`
 
@@ -139,24 +140,22 @@ Your entire response must be a raw JSON array starting with [ and ending with ].
 
     const match = text.match(/\[[\s\S]*\]/)
     if (!match) {
-      return NextResponse.json(
-        { error: 'No JSON array in model response.' },
-        { status: 500 }
-      )
+      await rollback()
+      return NextResponse.json({ error: 'Could not load news right now — please try again.' }, { status: 500 })
     }
 
     const articles = JSON.parse(match[0])
-
     return NextResponse.json({ articles })
   } catch (err) {
+    await rollback()
     console.error('CyberBrief API error:', err)
     const is429 = err.message?.includes('429') || err.message?.includes('Too Many Requests')
     if (is429) {
       return NextResponse.json(
-        { error: 'Service is busy — please wait 30 seconds and try again.' },
+        { error: 'Service is busy — please wait 30 seconds and try again. Your refresh was not used.' },
         { status: 429 }
       )
     }
-    return NextResponse.json({ error: err.message || 'Unknown error' }, { status: 500 })
+    return NextResponse.json({ error: (err.message || 'Unknown error') + ' — your refresh was not used.' }, { status: 500 })
   }
 }

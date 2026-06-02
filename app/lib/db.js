@@ -15,7 +15,6 @@ export async function setupDatabase() {
       updated_at TIMESTAMP DEFAULT NOW()
     )
   `
-
   await sql`
     CREATE TABLE IF NOT EXISTS anonymous_refreshes (
       id SERIAL PRIMARY KEY,
@@ -24,7 +23,6 @@ export async function setupDatabase() {
       refresh_count INT DEFAULT 1
     )
   `
-
   await sql`
     CREATE TABLE IF NOT EXISTS user_refreshes (
       id SERIAL PRIMARY KEY,
@@ -33,8 +31,6 @@ export async function setupDatabase() {
       refresh_count INT DEFAULT 1
     )
   `
-
-  // Pro user refresh tracking
   await sql`
     CREATE TABLE IF NOT EXISTS pro_refreshes (
       id SERIAL PRIMARY KEY,
@@ -84,6 +80,7 @@ export async function setUserNotPro(stripeSubscriptionId) {
   return rows[0]
 }
 
+/* ---------- ANONYMOUS (IP-based) ---------- */
 export async function checkAnonymousLimit(ipAddress) {
   const FREE_HOURS = 168
   const rows = await sql`SELECT * FROM anonymous_refreshes WHERE ip_address = ${ipAddress}`
@@ -94,15 +91,35 @@ export async function checkAnonymousLimit(ipAddress) {
   return { allowed: false, hoursUntilNextRefresh: Math.ceil(FREE_HOURS - hoursSince) }
 }
 
+// Returns rollback info so a failed fetch can be undone
 export async function recordAnonymousRefresh(ipAddress) {
+  const existing = await sql`SELECT last_refresh_at FROM anonymous_refreshes WHERE ip_address = ${ipAddress}`
+  const wasNew = existing.length === 0
+  const previousTimestamp = wasNew ? null : existing[0].last_refresh_at
   await sql`
     INSERT INTO anonymous_refreshes (ip_address, last_refresh_at, refresh_count)
     VALUES (${ipAddress}, NOW(), 1)
     ON CONFLICT (ip_address) DO UPDATE
     SET last_refresh_at = NOW(), refresh_count = anonymous_refreshes.refresh_count + 1
   `
+  return { wasNew, previousTimestamp }
 }
 
+export async function rollbackAnonymousRefresh(ipAddress, rollback) {
+  if (!rollback) return
+  if (rollback.wasNew) {
+    await sql`DELETE FROM anonymous_refreshes WHERE ip_address = ${ipAddress}`
+  } else {
+    await sql`
+      UPDATE anonymous_refreshes
+      SET last_refresh_at = ${rollback.previousTimestamp},
+          refresh_count = GREATEST(0, refresh_count - 1)
+      WHERE ip_address = ${ipAddress}
+    `
+  }
+}
+
+/* ---------- SIGNED-IN FREE ---------- */
 export async function checkSignedInFreeLimit(clerkUserId) {
   const FREE_HOURS = 168
   const rows = await sql`SELECT * FROM user_refreshes WHERE clerk_user_id = ${clerkUserId}`
@@ -114,15 +131,33 @@ export async function checkSignedInFreeLimit(clerkUserId) {
 }
 
 export async function recordSignedInRefresh(clerkUserId) {
+  const existing = await sql`SELECT last_refresh_at FROM user_refreshes WHERE clerk_user_id = ${clerkUserId}`
+  const wasNew = existing.length === 0
+  const previousTimestamp = wasNew ? null : existing[0].last_refresh_at
   await sql`
     INSERT INTO user_refreshes (clerk_user_id, last_refresh_at, refresh_count)
     VALUES (${clerkUserId}, NOW(), 1)
     ON CONFLICT (clerk_user_id) DO UPDATE
     SET last_refresh_at = NOW(), refresh_count = user_refreshes.refresh_count + 1
   `
+  return { wasNew, previousTimestamp }
 }
 
-// Pro users: 1 refresh every 4 hours
+export async function rollbackSignedInRefresh(clerkUserId, rollback) {
+  if (!rollback) return
+  if (rollback.wasNew) {
+    await sql`DELETE FROM user_refreshes WHERE clerk_user_id = ${clerkUserId}`
+  } else {
+    await sql`
+      UPDATE user_refreshes
+      SET last_refresh_at = ${rollback.previousTimestamp},
+          refresh_count = GREATEST(0, refresh_count - 1)
+      WHERE clerk_user_id = ${clerkUserId}
+    `
+  }
+}
+
+/* ---------- PRO (4-hour cooldown) ---------- */
 export async function checkProLimit(clerkUserId) {
   const PRO_HOURS = 4
   const rows = await sql`SELECT * FROM pro_refreshes WHERE clerk_user_id = ${clerkUserId}`
@@ -134,10 +169,28 @@ export async function checkProLimit(clerkUserId) {
 }
 
 export async function recordProRefresh(clerkUserId) {
+  const existing = await sql`SELECT last_refresh_at FROM pro_refreshes WHERE clerk_user_id = ${clerkUserId}`
+  const wasNew = existing.length === 0
+  const previousTimestamp = wasNew ? null : existing[0].last_refresh_at
   await sql`
     INSERT INTO pro_refreshes (clerk_user_id, last_refresh_at, refresh_count)
     VALUES (${clerkUserId}, NOW(), 1)
     ON CONFLICT (clerk_user_id) DO UPDATE
     SET last_refresh_at = NOW(), refresh_count = pro_refreshes.refresh_count + 1
   `
+  return { wasNew, previousTimestamp }
+}
+
+export async function rollbackProRefresh(clerkUserId, rollback) {
+  if (!rollback) return
+  if (rollback.wasNew) {
+    await sql`DELETE FROM pro_refreshes WHERE clerk_user_id = ${clerkUserId}`
+  } else {
+    await sql`
+      UPDATE pro_refreshes
+      SET last_refresh_at = ${rollback.previousTimestamp},
+          refresh_count = GREATEST(0, refresh_count - 1)
+      WHERE clerk_user_id = ${clerkUserId}
+    `
+  }
 }

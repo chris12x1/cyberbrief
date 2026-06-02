@@ -72,7 +72,7 @@ function LoadingCard({ index }) {
   )
 }
 
-function AuthBar({ isSignedIn, isPro, onUpgrade, upgrading }) {
+function AuthBar({ isSignedIn, isPro, onUpgrade, upgrading, onManage, managing }) {
   return (
     <div style={{
       position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
@@ -115,12 +115,13 @@ function AuthBar({ isSignedIn, isPro, onUpgrade, upgrading }) {
               </button>
             )}
             {isPro && (
-              <span style={{
+              <button onClick={onManage} disabled={managing} title="Manage your subscription" style={{
                 color: '#4ade80', fontSize: '11px',
                 fontFamily: "'JetBrains Mono', monospace",
                 border: '1px solid #4ade8044', borderRadius: '6px',
                 padding: '4px 10px', background: '#4ade8011',
-              }}>● PRO</span>
+                cursor: managing ? 'wait' : 'pointer',
+              }}>{managing ? 'Opening...' : '● PRO ⚙'}</button>
             )}
             <UserButton afterSignOutUrl="/" />
           </div>
@@ -262,6 +263,7 @@ export default function Home() {
   const [lastFetched, setLastFetched] = useState(null)
   const [error, setError] = useState(null)
   const [upgrading, setUpgrading] = useState(false)
+  const [managing, setManaging] = useState(false)
   const [cooldownMinutes, setCooldownMinutes] = useState(0)
   const [isLockedOut, setIsLockedOut] = useState(false)
 
@@ -341,6 +343,19 @@ export default function Home() {
     }
   }
 
+  async function handleManageSubscription() {
+    setManaging(true)
+    try {
+      const res = await fetch('/api/create-portal', { method: 'POST' })
+      const data = await res.json()
+      if (data.url) window.location.href = data.url
+      else throw new Error(data.error)
+    } catch (err) {
+      alert('Could not open subscription management: ' + err.message)
+      setManaging(false)
+    }
+  }
+
   async function fetchNews() {
     setLoading(true)
     setError(null)
@@ -382,7 +397,7 @@ export default function Home() {
       <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0, backgroundImage: 'linear-gradient(#0d1628 1px, transparent 1px), linear-gradient(90deg, #0d1628 1px, transparent 1px)', backgroundSize: '40px 40px', opacity: 0.4 }} />
       <div style={{ position: 'fixed', left: 0, right: 0, height: '80px', zIndex: 0, pointerEvents: 'none', background: 'linear-gradient(transparent, rgba(58,123,213,0.03), transparent)', animation: 'scanline 8s linear infinite' }} />
 
-      <AuthBar isSignedIn={isSignedIn} isPro={isPro} onUpgrade={handleUpgrade} upgrading={upgrading} />
+      <AuthBar isSignedIn={isSignedIn} isPro={isPro} onUpgrade={handleUpgrade} upgrading={upgrading} onManage={handleManageSubscription} managing={managing} />
 
       <div style={{ position: 'relative', zIndex: 1, maxWidth: '860px', margin: '0 auto', padding: '80px 20px 40px' }}>
         <div style={{ marginBottom: '24px' }}>
