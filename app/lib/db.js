@@ -39,7 +39,6 @@ export async function setupDatabase() {
       refresh_count INT DEFAULT 1
     )
   `
-  // Each user's own last-fetched news (shown to them across any device)
   await sql`
     CREATE TABLE IF NOT EXISTS user_news (
       clerk_user_id TEXT PRIMARY KEY,
@@ -73,6 +72,17 @@ export async function setUserPro(clerkUserId, stripeCustomerId, stripeSubscripti
         stripe_subscription_id = ${stripeSubscriptionId},
         updated_at = NOW()
     WHERE clerk_user_id = ${clerkUserId}
+    RETURNING *
+  `
+  return rows[0]
+}
+
+// Re-affirm/restore Pro when a subscription recovers (e.g. after a failed payment is fixed)
+export async function setUserProBySubscription(stripeSubscriptionId) {
+  const rows = await sql`
+    UPDATE users
+    SET is_pro = TRUE, updated_at = NOW()
+    WHERE stripe_subscription_id = ${stripeSubscriptionId}
     RETURNING *
   `
   return rows[0]
