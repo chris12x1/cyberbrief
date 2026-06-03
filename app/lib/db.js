@@ -39,10 +39,10 @@ export async function setupDatabase() {
       refresh_count INT DEFAULT 1
     )
   `
-  // Single shared snapshot of the latest news (same for all users)
+  // Each user's own last-fetched news (shown to them across any device)
   await sql`
-    CREATE TABLE IF NOT EXISTS news_cache (
-      id INT PRIMARY KEY,
+    CREATE TABLE IF NOT EXISTS user_news (
+      clerk_user_id TEXT PRIMARY KEY,
       articles JSONB,
       fetched_at TIMESTAMP DEFAULT NOW()
     )
@@ -88,17 +88,17 @@ export async function setUserNotPro(stripeSubscriptionId) {
   return rows[0]
 }
 
-/* ---------- SHARED NEWS CACHE ---------- */
-export async function getCachedNews() {
-  const rows = await sql`SELECT articles, fetched_at FROM news_cache WHERE id = 1`
+/* ---------- PER-USER NEWS ---------- */
+export async function getUserNews(clerkUserId) {
+  const rows = await sql`SELECT articles, fetched_at FROM user_news WHERE clerk_user_id = ${clerkUserId}`
   return rows[0] || null
 }
 
-export async function setCachedNews(articles) {
+export async function setUserNews(clerkUserId, articles) {
   await sql`
-    INSERT INTO news_cache (id, articles, fetched_at)
-    VALUES (1, ${JSON.stringify(articles)}::jsonb, NOW())
-    ON CONFLICT (id) DO UPDATE
+    INSERT INTO user_news (clerk_user_id, articles, fetched_at)
+    VALUES (${clerkUserId}, ${JSON.stringify(articles)}::jsonb, NOW())
+    ON CONFLICT (clerk_user_id) DO UPDATE
     SET articles = ${JSON.stringify(articles)}::jsonb, fetched_at = NOW()
   `
 }

@@ -2,7 +2,7 @@ import { GoogleGenAI } from '@google/genai'
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import {
-  getUser, getCachedNews, setCachedNews,
+  getUser, getUserNews, setUserNews,
   checkAnonymousLimit, recordAnonymousRefresh, rollbackAnonymousRefresh,
   checkSignedInFreeLimit, recordSignedInRefresh, rollbackSignedInRefresh,
   checkProLimit, recordProRefresh, rollbackProRefresh,
@@ -50,11 +50,11 @@ export async function GET() {
   const { userId } = await auth()
   if (!userId) return NextResponse.json({ articles: null })
   try {
-    const cache = await getCachedNews()
-    if (!cache || !cache.articles) return NextResponse.json({ articles: null })
-    return NextResponse.json({ articles: cache.articles, fetchedAt: cache.fetched_at })
+    const stored = await getUserNews(userId)
+    if (!stored || !stored.articles) return NextResponse.json({ articles: null })
+    return NextResponse.json({ articles: stored.articles, fetchedAt: stored.fetched_at })
   } catch (e) {
-    console.error('getCachedNews error:', e)
+    console.error('getUserNews error:', e)
     return NextResponse.json({ articles: null })
   }
 }
@@ -155,8 +155,10 @@ Your entire response must be a raw JSON array starting with [ and ending with ].
 
     const articles = JSON.parse(match[0])
 
-    // Save to the shared cache so every user sees this instantly
-    try { await setCachedNews(articles) } catch (e) { console.error('setCachedNews failed:', e) }
+    // Save this user's news so they see it again on any device until they refresh
+    if (userId) {
+      try { await setUserNews(userId, articles) } catch (e) { console.error('setUserNews failed:', e) }
+    }
 
     return NextResponse.json({ articles })
   } catch (err) {
