@@ -4,7 +4,7 @@ import { setSharedNews } from '../../../lib/db'
 
 export const dynamic = 'force-dynamic'
 
-// Weekly job (Vercel Cron) that refreshes the shared feed all free users see.
+// Weekly job (Vercel Cron) — builds the free-tier "week in cybersecurity" digest.
 export async function GET(req) {
   const authHeader = req.headers.get('authorization')
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -12,9 +12,9 @@ export async function GET(req) {
   }
 
   try {
-    const articles = await fetchLatestNews()
+    const articles = await fetchLatestNews({ days: 7, count: 10 })
     await setSharedNews(articles)
-    console.log(`✅ Weekly shared news refreshed (${articles.length} stories)`)
+    console.log(`✅ Weekly shared digest refreshed (${articles.length} stories)`)
     return NextResponse.json({ ok: true, count: articles.length })
   } catch (err) {
     console.error('Cron refresh failed:', err)

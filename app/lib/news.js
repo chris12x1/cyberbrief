@@ -22,18 +22,20 @@ async function generateWithRetry(prompt, retries = 3) {
   }
 }
 
-// Fetches the latest cybersecurity news from Gemini. Throws 'NO_JSON' if the
-// model doesn't return a parseable array. Used by both the Pro refresh and the weekly cron.
-export async function fetchLatestNews() {
+// Fetch cybersecurity news from Gemini.
+//   Pro (default):        last 2 days, 8 stories — "what's happening now"
+//   Free weekly digest:   last 7 days, 10 stories — "the week in cybersecurity"
+// Throws 'NO_JSON' if the model doesn't return a parseable array.
+export async function fetchLatestNews({ days = 2, count = 8 } = {}) {
   const today = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
-  const yesterday = new Date(Date.now() - 24*60*60*1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
-  const twoDaysAgo = new Date(Date.now() - 48*60*60*1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+  const windowStart = new Date(Date.now() - days*24*60*60*1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+  const windowLabel = days <= 2 ? `${days * 24} hours` : `${days} days`
 
-  const prompt = `You are a cybersecurity analyst. Today is ${today}. Yesterday was ${yesterday}.
+  const prompt = `You are a cybersecurity analyst. Today is ${today}.
 
-Use Google Search to find the 8 most important cybersecurity news stories published BETWEEN ${twoDaysAgo} AND ${today}.
+Use Google Search to find the ${count} most important cybersecurity news stories published in the last ${windowLabel} (between ${windowStart} and ${today}).
 
-CRITICAL: Only include stories published in the last 48 hours. Reject any stories older than ${twoDaysAgo}. If the source article is from before ${twoDaysAgo}, do not include it.
+CRITICAL: Only include stories published within this window. Reject any story published before ${windowStart}.
 
 Return ONLY a valid JSON array — no markdown, no backticks, no explanation before or after.
 
