@@ -157,7 +157,7 @@ function UpgradeBanner({ onUpgrade, upgrading }) {
     }}>
       <div>
         <div style={{ color: '#7ab3f0', fontSize: '13px', fontFamily: "'Syne', sans-serif", fontWeight: 700, marginBottom: '4px' }}>⚡ Upgrade to Pro</div>
-        <div style={{ color: '#3a5a80', fontSize: '11px', fontFamily: "'JetBrains Mono', monospace" }}>1 refresh every 4 hours · Weekly email digest (coming soon) · Custom categories (coming soon)</div>
+        <div style={{ color: '#3a5a80', fontSize: '11px', fontFamily: "'JetBrains Mono', monospace" }}>Refresh the feed on demand (every 4 hours) · Weekly email digest (coming soon) · Custom categories (coming soon)</div>
       </div>
       <button onClick={onUpgrade} disabled={upgrading} style={{
         background: upgrading ? '#1a2e50' : '#3a7bd5', border: 'none', color: '#fff',
@@ -263,13 +263,15 @@ export default function Home() {
       if (cancelled) return
 
       if (isSignedIn) {
+        let proStatus = false
         try {
           const d = await (await fetch('/api/user-status')).json()
-          if (!cancelled) setIsPro(d.isPro || false)
+          proStatus = d.isPro || false
+          if (!cancelled) setIsPro(proStatus)
         } catch { /* ignore */ }
         if (cancelled) return
 
-        // Pull the shared cached news from the server (works across any device)
+        // Pro reads their own news; Free reads the shared snapshot
         let served = false
         try {
           const res = await fetch('/api/news')
@@ -284,8 +286,9 @@ export default function Home() {
         if (cancelled) return
 
         if (!served) {
-          // No shared news cached yet. Fetch fresh if allowed, else show cooldown panel.
-          if (status.allowed) fetchNews()
+          // Pro with no personal news yet → auto-fetch their own (if cooldown allows).
+          // Free with an empty shared cache → show samples until a Pro seeds it.
+          if (proStatus && status.allowed) fetchNews()
           else setIsShowingSamples(true)
         }
       } else {
@@ -337,7 +340,7 @@ export default function Home() {
 
   // ---- Derived display flags ----
   const showSamplesForAnon = !isSignedIn && isShowingSamples
-  const showCooldownPanel = isSignedIn && isShowingSamples && !loading
+  const showCooldownPanel = isSignedIn && isPro && isShowingSamples && !loading
   const showRealNews = !isShowingSamples
   const refreshDisabled = loading || cooldownMinutes > 0
 
@@ -391,16 +394,28 @@ export default function Home() {
                 )}
               </button>
             ))}
-            <button onClick={fetchNews} disabled={refreshDisabled} style={{
-              marginLeft: 'auto', background: refreshDisabled ? '#0a1120' : '#0f1e35',
-              border: '1px solid #1e3a5f', color: refreshDisabled ? '#1a3050' : '#3a7bd5',
-              borderRadius: '6px', padding: '5px 14px', fontSize: '11px',
-              fontFamily: "'JetBrains Mono', monospace", cursor: refreshDisabled ? 'not-allowed' : 'pointer',
-              display: 'flex', alignItems: 'center', gap: '6px',
-            }}>
-              <span style={{ display: 'inline-block', animation: loading ? 'spin 1s linear infinite' : 'none' }}>↻</span>
-              {loading ? 'Fetching...' : cooldownMinutes > 0 ? `Wait ${formatCooldown(cooldownMinutes)}` : 'Refresh'}
-            </button>
+            {isPro ? (
+              <button onClick={fetchNews} disabled={refreshDisabled} style={{
+                marginLeft: 'auto', background: refreshDisabled ? '#0a1120' : '#0f1e35',
+                border: '1px solid #1e3a5f', color: refreshDisabled ? '#1a3050' : '#3a7bd5',
+                borderRadius: '6px', padding: '5px 14px', fontSize: '11px',
+                fontFamily: "'JetBrains Mono', monospace", cursor: refreshDisabled ? 'not-allowed' : 'pointer',
+                display: 'flex', alignItems: 'center', gap: '6px',
+              }}>
+                <span style={{ display: 'inline-block', animation: loading ? 'spin 1s linear infinite' : 'none' }}>↻</span>
+                {loading ? 'Fetching...' : cooldownMinutes > 0 ? `Wait ${formatCooldown(cooldownMinutes)}` : 'Refresh'}
+              </button>
+            ) : (
+              <button onClick={handleUpgrade} disabled={upgrading} title="Upgrade to Pro to refresh on demand" style={{
+                marginLeft: 'auto', background: 'transparent',
+                border: '1px solid #1e3a5f', color: '#3a7bd5',
+                borderRadius: '6px', padding: '5px 14px', fontSize: '11px',
+                fontFamily: "'JetBrains Mono', monospace", cursor: upgrading ? 'wait' : 'pointer',
+                display: 'flex', alignItems: 'center', gap: '6px',
+              }}>
+                🔒 Refresh (Pro)
+              </button>
+            )}
           </div>
         )}
 
