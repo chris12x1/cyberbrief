@@ -46,6 +46,14 @@ export async function setupDatabase() {
       fetched_at TIMESTAMP DEFAULT NOW()
     )
   `
+  // Single shared snapshot shown to all free users
+  await sql`
+    CREATE TABLE IF NOT EXISTS news_cache (
+      id INT PRIMARY KEY,
+      articles JSONB,
+      fetched_at TIMESTAMP DEFAULT NOW()
+    )
+  `
 }
 
 export async function getUser(clerkUserId) {
@@ -109,6 +117,21 @@ export async function setUserNews(clerkUserId, articles) {
     INSERT INTO user_news (clerk_user_id, articles, fetched_at)
     VALUES (${clerkUserId}, ${JSON.stringify(articles)}::jsonb, NOW())
     ON CONFLICT (clerk_user_id) DO UPDATE
+    SET articles = ${JSON.stringify(articles)}::jsonb, fetched_at = NOW()
+  `
+}
+
+/* ---------- SHARED NEWS (free tier reads this) ---------- */
+export async function getSharedNews() {
+  const rows = await sql`SELECT articles, fetched_at FROM news_cache WHERE id = 1`
+  return rows[0] || null
+}
+
+export async function setSharedNews(articles) {
+  await sql`
+    INSERT INTO news_cache (id, articles, fetched_at)
+    VALUES (1, ${JSON.stringify(articles)}::jsonb, NOW())
+    ON CONFLICT (id) DO UPDATE
     SET articles = ${JSON.stringify(articles)}::jsonb, fetched_at = NOW()
   `
 }
